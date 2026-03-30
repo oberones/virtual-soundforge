@@ -3,14 +3,12 @@ import {
   projectToSummary
 } from "../core/project.js";
 import { createRandomGenerator } from "../core/generators/random.js";
-import { compositionToSoundBoxSong } from "../core/adapter/soundbox.js";
+import { renderCompositionToWave } from "../core/render/simple-synth.js";
 
 const state = {
   project: null,
   composition: null,
-  song: null,
   wave: null,
-  player: null,
   objectUrl: null
 };
 
@@ -86,46 +84,40 @@ function generateComposition() {
 
   const generator = createRandomGenerator();
   state.composition = generator.generate(state.project);
-  state.song = compositionToSoundBoxSong(state.composition);
   state.wave = null;
 
   updateUi();
   setStatus("Composition generated. Ready to render.");
 }
 
-function renderSong(done) {
-  if (!state.song) {
+function renderComposition(done) {
+  if (!state.composition) {
     generateComposition();
   }
 
   setStatus("Rendering audio...");
-  state.player = new CPlayer();
-  state.player.generate(state.song, null, function (progress) {
-    if (progress >= 1) {
-      state.wave = state.player.createWave();
-      renderAudioWave();
-      setStatus("Render complete.");
-      if (done) {
-        done();
-      }
-    } else {
-      setStatus("Rendering audio... " + Math.round(progress * 100) + "%");
+  window.setTimeout(function () {
+    state.wave = renderCompositionToWave(state.composition);
+    renderAudioWave();
+    setStatus("Render complete.");
+    if (done) {
+      done();
     }
-  });
+  }, 0);
 }
 
 function playSong() {
-  renderSong(function () {
+  renderComposition(function () {
     elements.audio.currentTime = 0;
     elements.audio.play();
   });
 }
 
 function exportWave() {
-  renderSong(function () {
+  renderComposition(function () {
     const link = document.createElement("a");
     link.href = state.objectUrl;
-    link.download = "soundbox-generative.wav";
+    link.download = "generative-harmony.wav";
     link.click();
   });
 }

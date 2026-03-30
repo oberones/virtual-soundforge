@@ -72,8 +72,9 @@ function createTrack(project, instrumentation, progression, random) {
   return {
     role: instrumentation.role,
     instrument: {
-      presetQuery: instrumentation.presetQuery,
-      presetName: instrumentation.presetQuery,
+      presetQuery: instrumentation.presetQuery || null,
+      presetName: instrumentation.presetName || instrumentation.presetQuery || instrumentation.role,
+      customInstrument: instrumentation.customInstrument || null,
       voicing: instrumentation.voicing || null
     },
     notes: notes
@@ -81,7 +82,7 @@ function createTrack(project, instrumentation, progression, random) {
 }
 
 function createHarmonicBar(project, instrumentation, degree, bar, scalePitches, random) {
-  const chord = createChordTones(scalePitches, degree, instrumentation.lane || 0);
+  const voiceNote = createVoiceNote(scalePitches, degree, instrumentation.chordTone || 0);
   const variation = project.controls.variation;
   const complexity = project.controls.complexity;
   const entries = [];
@@ -89,40 +90,33 @@ function createHarmonicBar(project, instrumentation, degree, bar, scalePitches, 
   const shouldSplit = complexity > 0.62 && random.chance(variation * 0.55);
   const baseLength = computeNoteLength(project.music.noteLength, shouldSplit);
 
-  chord.forEach(function (midi, chordIndex) {
-    const lateEntry = chordIndex > 0 && random.chance(variation * 0.18);
+  entries.push({
+    bar: bar,
+    row: startRow,
+    lengthRows: baseLength,
+    midi: voiceNote
+  });
+
+  if (shouldSplit) {
+    const move = random.chance(0.5) ? 1 : -1;
+    const idx = scalePitches.indexOf(voiceNote);
+    const target = scalePitches[clamp(idx + move, 0, scalePitches.length - 1)];
     entries.push({
       bar: bar,
-      row: lateEntry ? Math.min(3, startRow + chordIndex) : startRow,
-      lengthRows: baseLength,
-      midi: midi
+      row: 8,
+      lengthRows: Math.max(4, Math.round(baseLength * 0.55)),
+      midi: target
     });
-
-    if (shouldSplit) {
-      const move = random.chance(0.5) ? 1 : -1;
-      const idx = scalePitches.indexOf(midi);
-      const target = scalePitches[clamp(idx + move, 0, scalePitches.length - 1)];
-      entries.push({
-        bar: bar,
-        row: 8,
-        lengthRows: Math.max(3, Math.round(baseLength * 0.55)),
-        midi: target
-      });
-    }
-  });
+  }
 
   return entries;
 }
 
-function createChordTones(scalePitches, degree, lane) {
-  const rootIndex = clamp(4 + degree + lane, 0, scalePitches.length - 1);
-  const thirdIndex = clamp(rootIndex + 2, 0, scalePitches.length - 1);
-  const fifthIndex = clamp(rootIndex + 4, 0, scalePitches.length - 1);
-
-  return [
-    scalePitches[rootIndex],
-    scalePitches[thirdIndex],
-    scalePitches[fifthIndex]
+function createVoiceNote(scalePitches, degree, chordTone) {
+  const rootIndex = clamp(5 + degree, 0, scalePitches.length - 1);
+  const toneOffsets = [0, 2, 4];
+  return scalePitches[
+    clamp(rootIndex + toneOffsets[chordTone % toneOffsets.length], 0, scalePitches.length - 1)
   ];
 }
 
