@@ -6,9 +6,10 @@ export function createRandomGenerator() {
     generate(project) {
       const random = createSeededRandom(project.seed);
       const bars = project.music.bars;
-      const progression = createProgression(random, project.music.scale, bars);
+      const sectionPlan = createSectionPlan(random, project.music.scale, bars);
+      const phraseLibrary = [];
       const tracks = project.instrumentation.map(function (instrumentation) {
-        return createTrack(project, instrumentation, progression, random);
+        return createTrack(project, instrumentation, sectionPlan, phraseLibrary, random);
       });
 
       return {
@@ -16,15 +17,17 @@ export function createRandomGenerator() {
         tempo: project.music.tempo,
         rowsPerPattern: project.music.patternRows,
         totalBars: bars,
-        sections: [
-          {
-            name: "A",
-            lengthBars: bars
-          }
-        ],
+        sections: sectionPlan.sections,
+        phraseLibrary: phraseLibrary,
         tracks: tracks,
         debug: {
-          progression: progression,
+          sectionPlan: sectionPlan.sections.map(function (section) {
+            return {
+              id: section.id,
+              progression: section.progression,
+              phraseBars: section.phraseBars
+            };
+          }),
           controls: project.controls
         }
       };
@@ -54,20 +57,51 @@ function createProgression(random, scale, bars) {
   return progression;
 }
 
-function createTrack(project, instrumentation, progression, random) {
+function createSectionPlan(random, scale, totalBars) {
+  const phraseBars = totalBars >= 8 ? 2 : 1;
+  const sectionBars = totalBars >= 12 ? 4 : totalBars;
+  const baseProgression = createProgression(random, scale, totalBars);
+  const sections = [];
+
+  for (let bar = 0, sectionIndex = 0; bar < totalBars; bar += sectionBars, sectionIndex += 1) {
+    const lengthBars = Math.min(sectionBars, totalBars - bar);
+    sections.push({
+      id: "section-" + sectionIndex,
+      name: String.fromCharCode(65 + sectionIndex),
+      startBar: bar,
+      lengthBars: lengthBars,
+      phraseBars: Math.min(phraseBars, lengthBars),
+      progression: baseProgression.slice(bar, bar + lengthBars)
+    });
+  }
+
+  return { sections: sections };
+}
+
+function createTrack(project, instrumentation, sectionPlan, phraseLibrary, random) {
   const scalePitches = getScalePitches(
     project.music.key,
     project.music.scale,
     instrumentation.octaveBase
   );
 
+  const phrases = [];
   const notes = [];
-  for (let bar = 0; bar < progression.length; bar += 1) {
-    notes.push.apply(
-      notes,
-      createHarmonicBar(project, instrumentation, progression[bar], bar, scalePitches, random)
+  sectionPlan.sections.forEach(function (section) {
+    const sectionPhrases = createSectionPhrases(
+      project,
+      instrumentation,
+      section,
+      scalePitches,
+      phraseLibrary,
+      random
     );
-  }
+    phrases.push.apply(phrases, sectionPhrases);
+  });
+
+  phrases.forEach(function (phraseInstance) {
+    notes.push.apply(notes, instantiatePhraseNotes(phraseInstance, phraseLibrary));
+  });
 
   return {
     role: instrumentation.role,
@@ -77,11 +111,93 @@ function createTrack(project, instrumentation, progression, random) {
       customInstrument: instrumentation.customInstrument || null,
       voicing: instrumentation.voicing || null
     },
+    phrases: phrases,
     notes: notes
   };
 }
 
-function createHarmonicBar(project, instrumentation, degree, bar, scalePitches, random) {
+function createSectionPhrases(project, instrumentation, section, scalePitches, phraseLibrary, random) {
+  const phrases = [];
+  for (let offset = 0, phraseIndex = 0; offset < section.lengthBars; offset += section.phraseBars, phraseIndex += 1) {
+    const phraseLengthBars = Math.min(section.phraseBars, section.lengthBars - offset);
+    const phraseProgression = section.progression.slice(offset, offset + phraseLengthBars);
+    const phraseId = createPhraseDefinition(
+      project,
+      instrumentation,
+      section,
+      phraseIndex,
+      phraseProgression,
+      phraseLengthBars,
+      scalePitches,
+      phraseLibrary,
+      random
+    );
+
+    phrases.push({
+      phraseId: phraseId,
+      sectionId: section.id,
+      startBar: section.startBar + offset,
+      lengthBars: phraseLengthBars
+    });
+  }
+
+  return phrases;
+}
+
+function createPhraseDefinition(
+  project,
+  instrumentation,
+  section,
+  phraseIndex,
+  phraseProgression,
+  phraseLengthBars,
+  scalePitches,
+  phraseLibrary,
+  random
+) {
+  const notes = [];
+  for (let localBar = 0; localBar < phraseProgression.length; localBar += 1) {
+    notes.push.apply(
+      notes,
+      createHarmonicBar(project, instrumentation, phraseProgression[localBar], localBar, scalePitches, random)
+    );
+  }
+
+  const phraseId = [
+    instrumentation.role,
+    section.id,
+    "phrase",
+    phraseIndex
+  ].join("-");
+
+  phraseLibrary.push({
+    id: phraseId,
+    role: instrumentation.role,
+    sectionId: section.id,
+    lengthBars: phraseLengthBars,
+    notes: notes
+  });
+
+  return phraseId;
+}
+
+function instantiatePhraseNotes(phraseInstance, phraseLibrary) {
+  const phrase = findPhrase(phraseLibrary, phraseInstance.phraseId);
+  if (!phrase) {
+    return [];
+  }
+
+  return phrase.notes.map(function (note) {
+    return {
+      bar: phraseInstance.startBar + note.bar,
+      row: note.row,
+      lengthRows: note.lengthRows,
+      midi: note.midi
+    };
+  });
+}
+
+function createHarmonicBar(project, instrumentation, degree, localBar, scalePitches, random) {
   const voiceNote = createVoiceNote(scalePitches, degree, instrumentation.chordTone || 0);
   const variation = project.controls.variation;
   const complexity = project.controls.complexity;
@@ -91,7 +207,7 @@ function createHarmonicBar(project, instrumentation, degree, bar, scalePitches, 
   const baseLength = computeNoteLength(project.music.noteLength, shouldSplit);
 
   entries.push({
-    bar: bar,
+    bar: localBar,
     row: startRow,
     lengthRows: baseLength,
     midi: voiceNote
@@ -102,7 +218,7 @@ function createHarmonicBar(project, instrumentation, degree, bar, scalePitches, 
     const idx = scalePitches.indexOf(voiceNote);
     const target = scalePitches[clamp(idx + move, 0, scalePitches.length - 1)];
     entries.push({
-      bar: bar,
+      bar: localBar,
       row: 8,
       lengthRows: Math.max(4, Math.round(baseLength * 0.55)),
       midi: target
@@ -110,6 +226,15 @@ function createHarmonicBar(project, instrumentation, degree, bar, scalePitches, 
   }
 
   return entries;
+}
+
+function findPhrase(phraseLibrary, phraseId) {
+  for (let index = 0; index < phraseLibrary.length; index += 1) {
+    if (phraseLibrary[index].id === phraseId) {
+      return phraseLibrary[index];
+    }
+  }
+  return null;
 }
 
 function createVoiceNote(scalePitches, degree, chordTone) {

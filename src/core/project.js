@@ -27,6 +27,7 @@ export function createProjectFromForm(form) {
 }
 
 export function projectToSummary(project, composition) {
+  const totalPhrases = composition.phraseLibrary ? composition.phraseLibrary.length : 0;
   const lines = [
     "Mode: " + project.mode,
     "Seed: " + project.seed,
@@ -37,14 +38,16 @@ export function projectToSummary(project, composition) {
     "Note length: " + Math.round(project.music.noteLength * 100) + "%",
     "Pattern rows: " + project.music.patternRows,
     "Tracks: " + composition.tracks.length,
+    "Phrases: " + totalPhrases,
     "Sections: " + composition.sections.map(function (section) {
-      return section.name + "(" + section.lengthBars + " bars)";
+      return section.name + "(" + section.lengthBars + " bars, phrase size " + section.phraseBars + ")";
     }).join(", ")
   ];
 
   composition.tracks.forEach(function (track) {
     lines.push(
       track.role + ": " +
+      track.phrases.length + " phrases, " +
       track.notes.length + " note events, preset " +
       track.instrument.presetName
     );
