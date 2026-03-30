@@ -30,8 +30,8 @@ export function compositionToSoundBoxSong(composition) {
 }
 
 function buildChannel(track, endPattern, patternLen) {
-  const preset = findPreset(track.instrument.presetQuery);
-  const instrument = cloneInstrument(preset.i);
+  const sourceInstrument = track.instrument.customInstrument || findPreset(track.instrument.presetQuery).i;
+  const instrument = cloneInstrument(sourceInstrument);
   applyVoicing(instrument, track.instrument.voicing, track.notes);
   const channel = {
     i: instrument,
