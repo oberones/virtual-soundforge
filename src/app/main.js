@@ -4,6 +4,7 @@ import {
 } from "../core/project.js";
 import { createRandomGenerator } from "../core/generators/random.js";
 import { renderCompositionToWave } from "../core/render/simple-synth.js";
+import { renderCompositionToMidi } from "../core/render/midi-export.js";
 import { saveLatestSnapshot } from "../core/storage/session.js";
 
 const state = {
@@ -32,6 +33,7 @@ const elements = {
   shuffleSeedButton: document.getElementById("shuffleSeedButton"),
   playButton: document.getElementById("playButton"),
   exportButton: document.getElementById("exportButton"),
+  exportMidiButton: document.getElementById("exportMidiButton"),
   audio: document.getElementById("audio"),
   status: document.getElementById("status")
 };
@@ -130,6 +132,23 @@ function exportWave() {
   });
 }
 
+function exportMidi() {
+  if (!state.composition) {
+    generateComposition();
+  }
+
+  const midi = renderCompositionToMidi(state.composition);
+  const blob = new Blob([midi], { type: "audio/midi" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "generative-harmony.mid";
+  link.click();
+  window.setTimeout(function () {
+    URL.revokeObjectURL(url);
+  }, 0);
+}
+
 function randomSeed() {
   const value = Math.random().toString(36).slice(2, 10);
   elements.seed.value = value;
@@ -140,5 +159,6 @@ elements.generateButton.addEventListener("click", generateComposition);
 elements.shuffleSeedButton.addEventListener("click", randomSeed);
 elements.playButton.addEventListener("click", playSong);
 elements.exportButton.addEventListener("click", exportWave);
+elements.exportMidiButton.addEventListener("click", exportMidi);
 
 generateComposition();
