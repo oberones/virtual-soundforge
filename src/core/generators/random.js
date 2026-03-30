@@ -510,6 +510,7 @@ function createSongBarPattern(
   random
 ) {
   const style = project.music.style || "warm";
+  const isOrgan = style === "organ";
   const baseLength = computeNoteLength(
     getRoleNoteLength(project.music.noteLength, section.role, project.controls.drama),
     section.role !== "intro" || project.controls.drama > 0.4
@@ -539,12 +540,12 @@ function createSongBarPattern(
   if (section.role === "verse") {
     const notes = [{
       bar: localBar,
-        row: localBar % 2 === 0 ? 0 : (style === "organ" ? 0 : 1),
+        row: localBar % 2 === 0 ? 0 : (isOrgan ? 0 : 1),
         lengthRows: baseLength,
         midi: primary
       }];
 
-    if ((localBar + phraseIndex) % 2 === 1 || random.chance(0.25 + project.controls.variation * 0.2 + project.controls.evolution * 0.2 + getStyleSplitBias(style))) {
+    if (!isOrgan && ((localBar + phraseIndex) % 2 === 1 || random.chance(0.25 + project.controls.variation * 0.2 + project.controls.evolution * 0.2 + getStyleSplitBias(style)))) {
       notes.push({
         bar: localBar,
         row: style === "dark" ? 9 : 8,
@@ -567,14 +568,23 @@ function createSongBarPattern(
         row: 0,
         lengthRows: Math.min(15, baseLength + 1),
         midi: primary
-      },
-      {
-        bar: localBar,
-        row: style === "organ" ? 8 : 6,
-        lengthRows: Math.max(4, Math.round(baseLength * (0.45 + project.controls.drama * 0.15))),
-        midi: tertiary
       }
     ];
+    if (isOrgan) {
+      notes.push({
+        bar: localBar,
+        row: 4,
+        lengthRows: Math.max(6, Math.round(baseLength * 0.8)),
+        midi: secondary
+      });
+    } else {
+      notes.push({
+        bar: localBar,
+        row: 6,
+        lengthRows: Math.max(4, Math.round(baseLength * (0.45 + project.controls.drama * 0.15))),
+        midi: tertiary
+      });
+    }
     applyCadence(notes, section, cadenceContext, primary, secondary, tertiary, localBar, random);
     return {
       notes: notes,
@@ -583,26 +593,41 @@ function createSongBarPattern(
   }
 
   if (section.role === "bridge") {
-    const notes = [
-      {
-        bar: localBar,
-        row: 1,
-        lengthRows: Math.max(4, Math.round(baseLength * 0.55)),
-        midi: secondary
-      },
-      {
-        bar: localBar,
-        row: style === "glassy" ? 6 : 7,
-        lengthRows: Math.max(3, Math.round(baseLength * 0.35)),
-        midi: tertiary
-      },
-      {
-        bar: localBar,
-        row: 11,
-        lengthRows: 3,
-        midi: resolveVoiceLedPitch(tertiary, buildCandidateSet(findNeighborPitch(scalePitches, primary, random)), primary)
-      }
-    ];
+    const notes = isOrgan
+      ? [
+          {
+            bar: localBar,
+            row: 0,
+            lengthRows: Math.max(6, Math.round(baseLength * 0.8)),
+            midi: primary
+          },
+          {
+            bar: localBar,
+            row: 6,
+            lengthRows: Math.max(4, Math.round(baseLength * 0.45)),
+            midi: secondary
+          }
+        ]
+      : [
+          {
+            bar: localBar,
+            row: 1,
+            lengthRows: Math.max(4, Math.round(baseLength * 0.55)),
+            midi: secondary
+          },
+          {
+            bar: localBar,
+            row: style === "glassy" ? 6 : 7,
+            lengthRows: Math.max(3, Math.round(baseLength * 0.35)),
+            midi: tertiary
+          },
+          {
+            bar: localBar,
+            row: 11,
+            lengthRows: 3,
+            midi: resolveVoiceLedPitch(tertiary, buildCandidateSet(findNeighborPitch(scalePitches, primary, random)), primary)
+          }
+        ];
     applyCadence(notes, section, cadenceContext, primary, secondary, tertiary, localBar, random);
     return {
       notes: notes,
@@ -843,6 +868,12 @@ function getRoleRowOffset(role, localBar) {
 }
 
 function getRoleOctaveShift(role, trackRole, style) {
+  if (style === "organ") {
+    if (trackRole === "foundation") return -1;
+    if (trackRole === "body") return -1;
+    if (trackRole === "air") return -1;
+    if (trackRole === "shimmer" || trackRole === "halo" || trackRole === "glass") return -2;
+  }
   if (role === "chorus" && trackRole !== "foundation") {
     return style === "dark" ? 0 : 1;
   }

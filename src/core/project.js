@@ -286,10 +286,15 @@ function applyStyleToPalette(palette, style) {
       next.customInstrument[4] = 0;
       next.customInstrument[5] = Math.max(48, next.customInstrument[5] - 12);
       next.customInstrument[10] = Math.max(4, next.customInstrument[10] - 8);
-      next.customInstrument[12] = Math.max(42, next.customInstrument[12] - 20);
+      next.customInstrument[12] = Math.max(56, next.customInstrument[12] - 8);
       next.customInstrument[27] = Math.max(8, next.customInstrument[27] - 12);
       next.voicing.delayAmount = Math.max(8, next.voicing.delayAmount - 14);
-      next.voicing.release = Math.max(40, next.voicing.release - 18);
+      next.voicing.release = Math.max(56, next.voicing.release - 6);
+      next.voicing.panAmount = Math.max(8, next.voicing.panAmount - 18);
+      next.octaveBase -= 1;
+      if (voice.role === "air" || voice.role === "shimmer" || voice.role === "halo" || voice.role === "glass") {
+        next.octaveBase -= 1;
+      }
     } else if (style === "dark") {
       next.presetName += " / Dark";
       next.customInstrument[0] = 3;
