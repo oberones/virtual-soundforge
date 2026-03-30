@@ -39,8 +39,10 @@ Status:
 
 - The current generator now emits sections and phrase instances as the
   composition backbone.
-- Phrase mode itself is not implemented yet, but the internal data model now
-  supports it directly.
+- Phrase mode is now implemented as a first pass with reusable phrase families
+  and lightweight mutation across repeated phrase instances.
+- The next improvement is to make phrase mutations more musical and intentional
+  rather than mostly structural.
 
 ### Phase 3
 
