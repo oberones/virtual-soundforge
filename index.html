@@ -92,22 +92,26 @@
       </div>
     </section>
 
-    <section class="layout">
-      <article class="card">
-        <h2>Composition Summary</h2>
-        <pre id="summary"></pre>
-      </article>
-
-      <article class="card">
-        <h2>Generation Log</h2>
-        <pre id="debug"></pre>
-      </article>
-    </section>
-
     <section class="card">
       <h2>Playback</h2>
       <audio id="audio" controls></audio>
       <p id="status" class="status">Ready.</p>
+    </section>
+
+    <section class="layout">
+      <details class="card collapsible" open>
+        <summary>
+          <h2>Composition Summary</h2>
+        </summary>
+        <pre id="summary"></pre>
+      </details>
+
+      <details class="card collapsible">
+        <summary>
+          <h2>Generation Log</h2>
+        </summary>
+        <pre id="debug"></pre>
+      </details>
     </section>
   </main>
 
