@@ -50,6 +50,13 @@ Status:
 - Generate sections such as intro, verse, chorus, and bridge
 - Add contrast heuristics between sections
 
+Status:
+
+- Song mode is now implemented as a first pass with section-role planning and
+  role-aware phrase shaping for intro, verse, chorus, and bridge style parts.
+- The next improvement is stronger contrast and more deliberate transitions
+  between sections.
+
 ### Phase 4
 
 - Replace the legacy live preview path with a modern Web Audio implementation

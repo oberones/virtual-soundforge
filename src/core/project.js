@@ -40,7 +40,7 @@ export function projectToSummary(project, composition) {
     "Tracks: " + composition.tracks.length,
     "Phrases: " + totalPhrases,
     "Sections: " + composition.sections.map(function (section) {
-      return section.name + "(" + section.lengthBars + " bars, phrase size " + section.phraseBars + ")";
+      return section.name + " [" + section.role + "] (" + section.lengthBars + " bars, phrase size " + section.phraseBars + ")";
     }).join(", ")
   ];
 
