@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SoundBox Generative Sketch</title>
+  <link rel="stylesheet" href="generative.css" />
+  <script src="common.js"></script>
+  <script src="presets.js"></script>
+  <script src="player.js"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <section class="hero">
+      <p class="eyebrow">Generative Rewrite Prototype</p>
+      <h1>SoundBox as a generative music engine</h1>
+      <p class="lede">
+        This parallel app keeps the legacy synth renderer, but swaps the tracker
+        workflow for high-level musical inputs and mode-driven generation.
+      </p>
+    </section>
+
+    <section class="controls card">
+      <div class="grid">
+        <label>
+          <span>Mode</span>
+          <select id="mode">
+            <option value="random">Random</option>
+          </select>
+        </label>
+        <label>
+          <span>Key</span>
+          <select id="key">
+            <option>C</option>
+            <option>C#</option>
+            <option>D</option>
+            <option>D#</option>
+            <option>E</option>
+            <option>F</option>
+            <option>F#</option>
+            <option>G</option>
+            <option>G#</option>
+            <option>A</option>
+            <option>A#</option>
+            <option>B</option>
+          </select>
+        </label>
+        <label>
+          <span>Scale</span>
+          <select id="scale">
+            <option value="major">Major</option>
+            <option value="minor">Minor</option>
+          </select>
+        </label>
+        <label>
+          <span>Tempo</span>
+          <input id="tempo" type="number" min="60" max="180" step="1" value="112" />
+        </label>
+        <label>
+          <span>Bars</span>
+          <input id="bars" type="number" min="4" max="16" step="1" value="8" />
+        </label>
+        <label>
+          <span>Seed</span>
+          <input id="seed" type="text" value="aurora-01" />
+        </label>
+        <label>
+          <span>Density</span>
+          <input id="density" type="range" min="0" max="100" step="1" value="58" />
+        </label>
+        <label>
+          <span>Complexity</span>
+          <input id="complexity" type="range" min="0" max="100" step="1" value="44" />
+        </label>
+        <label>
+          <span>Variation</span>
+          <input id="variation" type="range" min="0" max="100" step="1" value="36" />
+        </label>
+      </div>
+
+      <div class="actions">
+        <button id="generateButton" type="button">Generate</button>
+        <button id="shuffleSeedButton" type="button">Shuffle Seed</button>
+        <button id="playButton" type="button">Play</button>
+        <button id="exportButton" type="button">Export WAV</button>
+      </div>
+    </section>
+
+    <section class="layout">
+      <article class="card">
+        <h2>Composition Summary</h2>
+        <pre id="summary"></pre>
+      </article>
+
+      <article class="card">
+        <h2>Generation Log</h2>
+        <pre id="debug"></pre>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>Playback</h2>
+      <audio id="audio" controls></audio>
+      <p id="status" class="status">Ready.</p>
+    </section>
+  </main>
+
+  <script type="module" src="./src/app/main.js"></script>
+</body>
+</html>
