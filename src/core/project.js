@@ -10,6 +10,7 @@ export function createProjectFromForm(form) {
       tempo: clamp(Math.round(form.tempo || 112), 60, 180),
       bars: clamp(Math.round(form.bars || 8), 4, 16),
       formStyle: form.formStyle || "balanced",
+      style: form.style || "warm",
       voices: clamp(Math.round(form.voices || 3), 1, 6),
       noteLength: clamp(form.noteLength, 0.25, 1),
       beatsPerBar: 4,
@@ -24,6 +25,7 @@ export function createProjectFromForm(form) {
       evolution: clamp(form.evolution, 0, 1)
     },
     instrumentation: createHarmonicInstrumentation(
+      form.style || "warm",
       clamp(Math.round(form.voices || 3), 1, 6)
     )
   };
@@ -38,6 +40,7 @@ export function projectToSummary(project, composition) {
     "Tempo: " + project.music.tempo + " BPM",
     "Bars: " + project.music.bars,
     "Form: " + project.music.formStyle,
+    "Style: " + project.music.style,
     "Voices: " + project.music.voices,
     "Note length: " + Math.round(project.music.noteLength * 100) + "%",
     "Drama: " + Math.round(project.controls.drama * 100) + "%",
@@ -66,7 +69,7 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function createHarmonicInstrumentation(voices) {
+function createHarmonicInstrumentation(style, voices) {
   const palette = [
     {
       role: "foundation",
@@ -245,7 +248,82 @@ function createHarmonicInstrumentation(voices) {
     }
   ];
 
-  return palette.slice(0, voices);
+  return applyStyleToPalette(palette, style).slice(0, voices);
+}
+
+function applyStyleToPalette(palette, style) {
+  return palette.map(function (voice) {
+    const next = {
+      role: voice.role,
+      presetName: voice.presetName,
+      octaveBase: voice.octaveBase,
+      chordTone: voice.chordTone,
+      customInstrument: voice.customInstrument.slice(),
+      voicing: {
+        attack: voice.voicing.attack,
+        sustain: voice.voicing.sustain,
+        release: voice.voicing.release,
+        drive: voice.voicing.drive,
+        panAmount: voice.voicing.panAmount,
+        delayAmount: voice.voicing.delayAmount
+      }
+    };
+
+    if (style === "glassy") {
+      next.presetName += " / Glassy";
+      next.customInstrument[0] = 0;
+      next.customInstrument[4] = 0;
+      next.customInstrument[7] = Math.max(next.customInstrument[7], 6);
+      next.customInstrument[21] = Math.min(255, next.customInstrument[21] + 28);
+      next.customInstrument[27] = Math.min(140, next.customInstrument[27] + 8);
+      next.voicing.release = Math.max(48, next.voicing.release - 8);
+      if (voice.role !== "foundation") {
+        next.octaveBase += 1;
+      }
+    } else if (style === "organ") {
+      next.presetName += " / Organ";
+      next.customInstrument[0] = 1;
+      next.customInstrument[4] = 0;
+      next.customInstrument[5] = Math.max(48, next.customInstrument[5] - 12);
+      next.customInstrument[10] = Math.max(4, next.customInstrument[10] - 8);
+      next.customInstrument[12] = Math.max(42, next.customInstrument[12] - 20);
+      next.customInstrument[27] = Math.max(8, next.customInstrument[27] - 12);
+      next.voicing.delayAmount = Math.max(8, next.voicing.delayAmount - 14);
+      next.voicing.release = Math.max(40, next.voicing.release - 18);
+    } else if (style === "dark") {
+      next.presetName += " / Dark";
+      next.customInstrument[0] = 3;
+      next.customInstrument[4] = 0;
+      next.customInstrument[21] = Math.max(120, next.customInstrument[21] - 46);
+      next.customInstrument[24] = Math.min(40, next.customInstrument[24] + 4);
+      next.voicing.release += 10;
+      if (voice.role !== "foundation") {
+        next.octaveBase -= 1;
+      }
+    } else if (style === "lush") {
+      next.presetName += " / Lush";
+      next.customInstrument[4] = 3;
+      next.customInstrument[5] = Math.min(120, next.customInstrument[5] + 18);
+      next.customInstrument[27] = Math.min(160, next.customInstrument[27] + 18);
+      next.voicing.release += 16;
+      next.voicing.delayAmount += 18;
+      next.voicing.panAmount = Math.min(126, next.voicing.panAmount + 12);
+    } else {
+      next.presetName += " / Warm";
+      next.customInstrument[0] = 3;
+      next.customInstrument[4] = next.customInstrument[4] || 0;
+      next.customInstrument[21] = Math.max(140, next.customInstrument[21] - 12);
+      next.voicing.release += 6;
+    }
+
+    next.customInstrument[10] = clamp(next.voicing.attack, 0, 255);
+    next.customInstrument[11] = clamp(next.voicing.sustain, 0, 255);
+    next.customInstrument[12] = clamp(next.voicing.release, 0, 255);
+    next.customInstrument[24] = clamp(next.voicing.drive, 0, 255);
+    next.customInstrument[27] = clamp(next.voicing.delayAmount, 0, 255);
+
+    return next;
+  });
 }
 
 function makeCustomInstrument(options) {
