@@ -4,6 +4,7 @@ import {
 } from "../core/project.js";
 import { createRandomGenerator } from "../core/generators/random.js";
 import { renderCompositionToWave } from "../core/render/simple-synth.js";
+import { saveLatestSnapshot } from "../core/storage/session.js";
 
 const state = {
   project: null,
@@ -31,8 +32,6 @@ const elements = {
   shuffleSeedButton: document.getElementById("shuffleSeedButton"),
   playButton: document.getElementById("playButton"),
   exportButton: document.getElementById("exportButton"),
-  summary: document.getElementById("summary"),
-  debug: document.getElementById("debug"),
   audio: document.getElementById("audio"),
   status: document.getElementById("status")
 };
@@ -61,13 +60,16 @@ function readForm() {
 }
 
 function updateUi() {
-  elements.summary.textContent = state.project && state.composition
-    ? projectToSummary(state.project, state.composition)
-    : "No composition generated yet.";
+  if (!state.project || !state.composition) {
+    return;
+  }
 
-  elements.debug.textContent = state.composition
-    ? JSON.stringify(state.composition.debug, null, 2)
-    : "Waiting for generation.";
+  const summary = projectToSummary(state.project, state.composition);
+  saveLatestSnapshot({
+    summary: summary,
+    debug: state.composition.debug,
+    generatedAt: new Date().toISOString()
+  });
 }
 
 function renderAudioWave() {

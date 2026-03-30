@@ -34,6 +34,34 @@ body {
   margin-bottom: 24px;
 }
 
+.top-nav {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 12px;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 112px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.nav-link.current {
+  background: var(--primary);
+  border-color: transparent;
+  color: #f8f5ee;
+}
+
 .eyebrow {
   margin: 0 0 10px;
   font-size: 12px;
