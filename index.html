@@ -8,6 +8,11 @@
 </head>
 <body>
   <main class="app-shell">
+    <nav class="top-nav card">
+      <a class="nav-link current" href="./index.html">Composer</a>
+      <a class="nav-link" href="./details.html">Details</a>
+    </nav>
+
     <section class="hero">
       <p class="eyebrow">Virtual Soundforge</p>
       <h1>Generative harmony in the browser</h1>
@@ -24,7 +29,7 @@
           <select id="mode">
             <option value="random">Random</option>
             <option value="phrase">Phrase</option>
-            <option value="song">Song</option>
+            <option value="song" selected>Song</option>
           </select>
         </label>
         <label>
@@ -113,22 +118,6 @@
       <h2>Playback</h2>
       <audio id="audio" controls></audio>
       <p id="status" class="status">Ready.</p>
-    </section>
-
-    <section class="layout">
-      <details class="card collapsible" open>
-        <summary>
-          <h2>Composition Summary</h2>
-        </summary>
-        <pre id="summary"></pre>
-      </details>
-
-      <details class="card collapsible">
-        <summary>
-          <h2>Generation Log</h2>
-        </summary>
-        <pre id="debug"></pre>
-      </details>
     </section>
   </main>
 

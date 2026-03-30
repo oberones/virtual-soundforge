@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Virtual Soundforge Details</title>
+  <link rel="stylesheet" href="index.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <nav class="top-nav card">
+      <a class="nav-link" href="./index.html">Composer</a>
+      <a class="nav-link current" href="./details.html">Details</a>
+    </nav>
+
+    <section class="hero">
+      <p class="eyebrow">Composition Details</p>
+      <h1>Summary and generation log</h1>
+      <p class="lede">
+        Review the latest generated composition, inspect section planning, and
+        compare phrase families without crowding the main composer page.
+      </p>
+    </section>
+
+    <section class="layout">
+      <details class="card collapsible" open>
+        <summary>
+          <h2>Composition Summary</h2>
+        </summary>
+        <pre id="summary">No composition has been generated yet.</pre>
+      </details>
+
+      <details class="card collapsible" open>
+        <summary>
+          <h2>Generation Log</h2>
+        </summary>
+        <pre id="debug">Generate something on the composer page first.</pre>
+      </details>
+    </section>
+  </main>
+
+  <script type="module" src="./src/app/details.js"></script>
+</body>
+</html>
