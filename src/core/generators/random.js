@@ -63,13 +63,10 @@ function createTrack(project, instrumentation, progression, random) {
 
   const notes = [];
   for (let bar = 0; bar < progression.length; bar += 1) {
-    if (instrumentation.role === "bass") {
-      notes.push.apply(notes, createBassBar(project, progression[bar], bar, scalePitches, random));
-    } else if (instrumentation.role === "pad") {
-      notes.push.apply(notes, createPadBar(project, progression[bar], bar, scalePitches, random));
-    } else {
-      notes.push.apply(notes, createLeadBar(project, progression[bar], bar, scalePitches, random));
-    }
+    notes.push.apply(
+      notes,
+      createHarmonicBar(project, instrumentation, progression[bar], bar, scalePitches, random)
+    );
   }
 
   return {
@@ -83,65 +80,48 @@ function createTrack(project, instrumentation, progression, random) {
   };
 }
 
-function createLeadBar(project, degree, bar, scalePitches, random) {
-  const notes = [];
-  const density = project.controls.density;
+function createHarmonicBar(project, instrumentation, degree, bar, scalePitches, random) {
+  const chord = createChordTones(scalePitches, degree, instrumentation.lane || 0);
+  const variation = project.controls.variation;
   const complexity = project.controls.complexity;
-  const baseIndex = 7 + degree;
-  const rhythmSteps = [0, 2, 4, 6, 8, 10, 12, 14];
+  const entries = [];
+  const startRow = random.chance(variation * 0.35) ? 1 : 0;
+  const shouldSplit = complexity > 0.62 && random.chance(variation * 0.55);
 
-  rhythmSteps.forEach(function (step) {
-    const probability = density * 0.8 + (step === 0 ? 0.2 : 0);
-    if (!random.chance(probability)) {
-      return;
-    }
-
-    const movement = random.int(0, Math.max(1, Math.round(complexity * 4)));
-    const direction = random.chance(0.5) ? 1 : -1;
-    const index = clamp(baseIndex + movement * direction, 3, scalePitches.length - 4);
-    notes.push({
+  chord.forEach(function (midi, chordIndex) {
+    const lateEntry = chordIndex > 0 && random.chance(variation * 0.18);
+    entries.push({
       bar: bar,
-      row: step,
-      lengthRows: random.chance(0.2 + complexity * 0.4) ? 3 : 2,
-      midi: scalePitches[index]
+      row: lateEntry ? Math.min(3, startRow + chordIndex) : startRow,
+      lengthRows: shouldSplit ? 8 : 14,
+      midi: midi
     });
+
+    if (shouldSplit) {
+      const move = random.chance(0.5) ? 1 : -1;
+      const idx = scalePitches.indexOf(midi);
+      const target = scalePitches[clamp(idx + move, 0, scalePitches.length - 1)];
+      entries.push({
+        bar: bar,
+        row: 8,
+        lengthRows: 6,
+        midi: target
+      });
+    }
   });
 
-  return notes;
+  return entries;
 }
 
-function createBassBar(project, degree, bar, scalePitches, random) {
-  const rootIndex = clamp(2 + degree, 0, scalePitches.length - 1);
-  const fifthIndex = clamp(rootIndex + 4, 0, scalePitches.length - 1);
-  const cadence = [
-    { row: 0, midi: scalePitches[rootIndex] },
-    { row: 4, midi: scalePitches[fifthIndex] },
-    { row: 8, midi: scalePitches[rootIndex] },
-    { row: 12, midi: scalePitches[fifthIndex] }
-  ];
-
-  return cadence.filter(function (_, index) {
-    return index === 0 || random.chance(0.78 + project.controls.density * 0.16);
-  }).map(function (item) {
-    return {
-      bar: bar,
-      row: item.row,
-      lengthRows: 4,
-      midi: item.midi
-    };
-  });
-}
-
-function createPadBar(project, degree, bar, scalePitches, random) {
-  const rootIndex = clamp(5 + degree, 0, scalePitches.length - 1);
+function createChordTones(scalePitches, degree, lane) {
+  const rootIndex = clamp(4 + degree + lane, 0, scalePitches.length - 1);
   const thirdIndex = clamp(rootIndex + 2, 0, scalePitches.length - 1);
   const fifthIndex = clamp(rootIndex + 4, 0, scalePitches.length - 1);
-  const row = random.chance(project.controls.variation * 0.5) ? 4 : 0;
 
   return [
-    { bar: bar, row: row, lengthRows: 12, midi: scalePitches[rootIndex] },
-    { bar: bar, row: row, lengthRows: 12, midi: scalePitches[thirdIndex] },
-    { bar: bar, row: row, lengthRows: 12, midi: scalePitches[fifthIndex] }
+    scalePitches[rootIndex],
+    scalePitches[thirdIndex],
+    scalePitches[fifthIndex]
   ];
 }
 

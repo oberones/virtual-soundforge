@@ -50,5 +50,6 @@ Build the generative application next to the legacy tracker until the new path i
 
 - The current prototype uses one bar per SoundBox pattern and 16 rows per bar.
 - Random mode is the first implemented mode.
+- The current prototype is intentionally harmonic-only and avoids percussive arrangement ideas.
 - The legacy tracker remains available at `index.html`.
 - The new prototype lives at `generative.html`.
