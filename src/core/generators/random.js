@@ -190,7 +190,7 @@ function createTrack(project, instrumentation, sectionPlan, phraseLibrary, rando
     lastMidi: null
   };
 
-  sectionPlan.sections.forEach(function (section) {
+  sectionPlan.sections.forEach(function (section, sectionIndex) {
     const sectionPhrases = createSectionPhrases(
       project,
       instrumentation,
@@ -199,6 +199,7 @@ function createTrack(project, instrumentation, sectionPlan, phraseLibrary, rando
       phraseFamily,
       phraseLibrary,
       voiceState,
+      sectionPlan.sections[sectionIndex + 1] || null,
       random
     );
     phrases.push.apply(phrases, sectionPhrases);
@@ -260,6 +261,7 @@ function createSectionPhrases(
   phraseFamily,
   phraseLibrary,
   voiceState,
+  nextSection,
   random
 ) {
   const phrases = [];
@@ -277,6 +279,8 @@ function createSectionPhrases(
       phraseFamily,
       phraseLibrary,
       voiceState,
+      offset + section.phraseBars >= section.lengthBars,
+      nextSection ? nextSection.role : null,
       random
     );
 
@@ -302,6 +306,8 @@ function createPhraseDefinition(
   phraseFamily,
   phraseLibrary,
   voiceState,
+  isLastPhraseInSection,
+  nextSectionRole,
   random
 ) {
   const phraseId = [
@@ -319,6 +325,8 @@ function createPhraseDefinition(
         phraseProgression,
         scalePitches,
         voiceState,
+        isLastPhraseInSection,
+        nextSectionRole,
         random
       )
     : project.mode === "phrase"
@@ -383,6 +391,8 @@ function createSongPhraseDefinition(
   phraseProgression,
   scalePitches,
   voiceState,
+  isLastPhraseInSection,
+  nextSectionRole,
   random
 ) {
   const notes = [];
@@ -397,6 +407,11 @@ function createSongPhraseDefinition(
       localBar,
       scalePitches,
       previousMidi,
+      {
+        isLastBarInPhrase: localBar === phraseProgression.length - 1,
+        isLastPhraseInSection: isLastPhraseInSection,
+        nextSectionRole: nextSectionRole
+      },
       random
     );
     notes.push.apply(notes, result.notes);
@@ -462,6 +477,7 @@ function createSongBarPattern(
   localBar,
   scalePitches,
   previousMidi,
+  cadenceContext,
   random
 ) {
   const baseLength = computeNoteLength(
@@ -477,14 +493,16 @@ function createSongBarPattern(
   const tertiary = resolveVoiceLedPitch(secondary, buildCandidateSet(tertiaryBase + roleOctave), tertiaryBase + roleOctave);
 
   if (section.role === "intro") {
-    return {
-      notes: [{
+    const notes = [{
         bar: localBar,
         row: 2,
         lengthRows: Math.max(6, baseLength - 2),
         midi: primary
-      }],
-      lastMidi: primary
+      }];
+    applyCadence(notes, section, cadenceContext, primary, secondary, tertiary, localBar, random);
+    return {
+      notes: notes,
+      lastMidi: notes[notes.length - 1].midi
     };
   }
 
@@ -505,6 +523,7 @@ function createSongBarPattern(
       });
     }
 
+    applyCadence(notes, section, cadenceContext, primary, secondary, tertiary, localBar, random);
     return {
       notes: notes,
       lastMidi: notes[notes.length - 1].midi
@@ -526,6 +545,7 @@ function createSongBarPattern(
         midi: tertiary
       }
     ];
+    applyCadence(notes, section, cadenceContext, primary, secondary, tertiary, localBar, random);
     return {
       notes: notes,
       lastMidi: notes[notes.length - 1].midi
@@ -553,20 +573,23 @@ function createSongBarPattern(
         midi: resolveVoiceLedPitch(tertiary, buildCandidateSet(findNeighborPitch(scalePitches, primary, random)), primary)
       }
     ];
+    applyCadence(notes, section, cadenceContext, primary, secondary, tertiary, localBar, random);
     return {
       notes: notes,
       lastMidi: notes[notes.length - 1].midi
     };
   }
 
-  return {
-    notes: [{
+  const notes = [{
       bar: localBar,
       row: 0,
       lengthRows: baseLength,
       midi: primary
-    }],
-    lastMidi: primary
+    }];
+  applyCadence(notes, section, cadenceContext, primary, secondary, tertiary, localBar, random);
+  return {
+    notes: notes,
+    lastMidi: notes[notes.length - 1].midi
   };
 }
 
@@ -699,6 +722,61 @@ function resolveVoiceLedPitch(previousMidi, candidates, preferredMidi) {
   }
 
   return best;
+}
+
+function applyCadence(notes, section, cadenceContext, primary, secondary, tertiary, localBar, random) {
+  if (!cadenceContext || !cadenceContext.isLastBarInPhrase) {
+    return;
+  }
+
+  if (section.role === "verse") {
+    notes.push({
+      bar: localBar,
+      row: 13,
+      lengthRows: 2,
+      midi: cadenceContext.isLastPhraseInSection && cadenceContext.nextSectionRole === "chorus"
+        ? tertiary
+        : secondary
+    });
+    return;
+  }
+
+  if (section.role === "chorus") {
+    notes.push({
+      bar: localBar,
+      row: 12,
+      lengthRows: 3,
+      midi: primary
+    });
+    return;
+  }
+
+  if (section.role === "bridge") {
+    notes.push({
+      bar: localBar,
+      row: 12,
+      lengthRows: 2,
+      midi: random.chance(0.5) ? secondary : primary
+    });
+    if (cadenceContext.isLastPhraseInSection && cadenceContext.nextSectionRole === "chorus") {
+      notes.push({
+        bar: localBar,
+        row: 14,
+        lengthRows: 1,
+        midi: tertiary
+      });
+    }
+    return;
+  }
+
+  if (section.role === "intro" && cadenceContext.isLastPhraseInSection) {
+    notes.push({
+      bar: localBar,
+      row: 12,
+      lengthRows: 2,
+      midi: secondary
+    });
+  }
 }
 
 function getRoleMutationBias(role) {
