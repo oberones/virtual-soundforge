@@ -35,6 +35,13 @@ Build the generative application next to the legacy tracker until the new path i
 - Introduce motif repetition and mutation
 - Capture phrase families instead of direct row data
 
+Status:
+
+- The current generator now emits sections and phrase instances as the
+  composition backbone.
+- Phrase mode itself is not implemented yet, but the internal data model now
+  supports it directly.
+
 ### Phase 3
 
 - Add song mode
