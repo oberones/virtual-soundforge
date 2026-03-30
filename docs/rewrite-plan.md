@@ -3,22 +3,22 @@
 ## What Exists Today
 
 - `gui.js` is a tracker-era monolith that owns song data, editing, serialization, playback, and UI.
-- `player-worker.js` is the most reusable part of the current codebase because it can render a SoundBox song object without depending on the editor.
-- `presets.js` contains a practical starting palette for generative output.
+- The original SoundBox renderer helped validate the first prototype, but the generative app now uses its own direct PCM synth path.
+- The legacy app still exists as a reference implementation and comparison point.
 
 ## Rewrite Direction
 
 Build the generative application next to the legacy tracker until the new path is mature.
 
 - Keep as reusable backend pieces:
-  - instrument parameter model
-  - preset library
-  - offline renderer
+  - broad musical constraints learned from the old row-based workflow
+  - the existing repo as a reference while the new app matures
 - Replace as new product surface:
   - authoring model
   - interaction model
   - UI
   - generation logic
+  - audio rendering
 
 ## Phase Breakdown
 
@@ -27,7 +27,7 @@ Build the generative application next to the legacy tracker until the new path i
 - Create a parallel app entry point
 - Define a new project schema
 - Add a seeded random generator
-- Add a SoundBox adapter that converts generated material into the legacy render format
+- Add a clean standalone synth renderer for playback and WAV export
 
 ### Phase 2
 
@@ -51,5 +51,4 @@ Build the generative application next to the legacy tracker until the new path i
 - The current prototype uses one bar per SoundBox pattern and 16 rows per bar.
 - Random mode is the first implemented mode.
 - The current prototype is intentionally harmonic-only and avoids percussive arrangement ideas.
-- The legacy tracker remains available at `index.html`.
-- The new prototype lives at `generative.html`.
+- The generative app now owns `index.html` as the default entry point.
