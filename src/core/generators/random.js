@@ -87,13 +87,14 @@ function createHarmonicBar(project, instrumentation, degree, bar, scalePitches, 
   const entries = [];
   const startRow = random.chance(variation * 0.35) ? 1 : 0;
   const shouldSplit = complexity > 0.62 && random.chance(variation * 0.55);
+  const baseLength = computeNoteLength(project.music.noteLength, shouldSplit);
 
   chord.forEach(function (midi, chordIndex) {
     const lateEntry = chordIndex > 0 && random.chance(variation * 0.18);
     entries.push({
       bar: bar,
       row: lateEntry ? Math.min(3, startRow + chordIndex) : startRow,
-      lengthRows: shouldSplit ? 8 : 14,
+      lengthRows: baseLength,
       midi: midi
     });
 
@@ -104,7 +105,7 @@ function createHarmonicBar(project, instrumentation, degree, bar, scalePitches, 
       entries.push({
         bar: bar,
         row: 8,
-        lengthRows: 6,
+        lengthRows: Math.max(3, Math.round(baseLength * 0.55)),
         midi: target
       });
     }
@@ -127,4 +128,12 @@ function createChordTones(scalePitches, degree, lane) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function computeNoteLength(noteLength, shouldSplit) {
+  const longLength = Math.round(6 + noteLength * 8);
+  if (shouldSplit) {
+    return clamp(Math.round(longLength * 0.72), 4, 12);
+  }
+  return clamp(longLength, 6, 15);
 }

@@ -32,7 +32,7 @@ export function compositionToSoundBoxSong(composition) {
 function buildChannel(track, endPattern, patternLen) {
   const preset = findPreset(track.instrument.presetQuery);
   const instrument = cloneInstrument(preset.i);
-  applyVoicing(instrument, track.instrument.voicing);
+  applyVoicing(instrument, track.instrument.voicing, track.notes);
   const channel = {
     i: instrument,
     p: [],
@@ -109,19 +109,35 @@ function cloneInstrument(instrument) {
   return instrument.slice();
 }
 
-function applyVoicing(instrument, voicing) {
+function applyVoicing(instrument, voicing, notes) {
   if (!voicing) {
     return;
   }
 
+  const averageLength = getAverageLength(notes);
+  const lengthFactor = averageLength / 16;
+
   instrument[ENV_ATTACK] = voicing.attack;
-  instrument[ENV_SUSTAIN] = voicing.sustain;
-  instrument[ENV_RELEASE] = voicing.release;
+  instrument[ENV_SUSTAIN] = clamp(Math.round(voicing.sustain * (0.55 + lengthFactor)), 8, 96);
+  instrument[ENV_RELEASE] = clamp(Math.round(voicing.release * (0.65 + lengthFactor)), 16, 120);
   instrument[FX_DRIVE] = voicing.drive;
   instrument[FX_PAN_AMT] = voicing.panAmount;
   instrument[FX_DELAY_AMT] = voicing.delayAmount;
   instrument[OSC1_VOL] = Math.min(255, instrument[OSC1_VOL] + 18);
   instrument[OSC2_VOL] = Math.min(255, instrument[OSC2_VOL] + 18);
+}
+
+function getAverageLength(notes) {
+  if (!notes || notes.length === 0) {
+    return 8;
+  }
+
+  let total = 0;
+  for (let index = 0; index < notes.length; index += 1) {
+    total += notes[index].lengthRows || 0;
+  }
+
+  return total / notes.length;
 }
 
 function calcSamplesPerRow(bpm) {
