@@ -1,6 +1,6 @@
 export function createSeededRandom(seedText) {
   let seed = 2166136261;
-  const text = String(seedText || "soundbox");
+  const text = String(seedText || "harmony");
 
   for (let index = 0; index < text.length; index += 1) {
     seed ^= text.charCodeAt(index);

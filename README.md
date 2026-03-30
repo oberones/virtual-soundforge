@@ -1,51 +1,79 @@
-# virtual-soundforge 
+# Virtual Soundforge
 
-## Running locally
+Virtual Soundforge is a browser-based generative harmony application built in
+plain HTML, CSS, and JavaScript.
 
-To run your own copy of SoundBox locally, you need to serve it via a web server
-(using the file:// protocol is *not* supported).
+The current project no longer treats the original SoundBox tracker as the main
+runtime path. Instead, the generative app lives as its own standalone
+experience, with its own composition model and its own lightweight synth
+renderer.
 
-A simple method is to use Python SimpleHTTPServer (that usually comes
-preinstalled on Unix-like systems such as macOS and Linux):
+## Current App
+
+The main entry point for the new app is:
+
+- `index.html`
+
+The current prototype focuses on:
+
+- harmonic composition instead of tracker editing
+- configurable key, scale, tempo, bar count, note length, and number of voices
+- seeded generation for repeatable results
+- direct audio rendering to WAV using a custom synth path
+
+## Legacy Reference
+
+This repository still contains the original SoundBox-style editor and playback
+code as reference material.
+
+Relevant legacy files include:
+
+- `gui.js`
+- `player.js`
+- `player-worker.js`
+- `jammer.js`
+
+Those files are no longer part of the active generative runtime, but they are
+useful historical context while the rewrite continues.
+
+## Project Structure
+
+- `index.html`: standalone generative app entry point
+- `index.css`: styling for the new UI
+- `src/app/main.js`: app wiring, form handling, playback, export
+- `src/core/project.js`: project schema and harmonic voice definitions
+- `src/core/generators/random.js`: seeded harmonic generator
+- `src/core/render/simple-synth.js`: custom audio renderer and WAV encoder
+- `docs/rewrite-plan.md`: rewrite notes and implementation direction
+
+## Running Locally
+
+Serve the repository from a local web server:
 
 ```bash
-cd path/to/soundbox
+cd /path/to/soundbox
 python -m http.server 8008
 ```
 
-Now point your browser to `http://localhost:8008/`.
+Then open:
+
+- `http://localhost:8008/` or `http://localhost:8008/index.html` for the new app
+
+Do not use `file://`; browser module loading and audio behavior are more
+reliable through a local server.
+
+## Development Notes
+
+- The active rewrite is intentionally framework-free.
+- The generative app is now independent from the old SoundBox render path.
+- The current prototype is harmonic-first and intentionally avoids percussion.
+- Audio export currently produces a rendered WAV file in the browser.
 
 ## License
 
-The SoundBox editor is licensed under the
-[GNU General Public License version 3](gpl.txt).
+The repository still contains legacy SoundBox code and assets. The SoundBox
+editor files remain covered by the GNU General Public License version 3; see
+[gpl.txt](gpl.txt).
 
-However, the minimal player routine, [player-small.js](player-small.js), is
-released under the [zlib/libpng license](https://opensource.org/licenses/Zlib).
-This makes it suitable for inclusion in your own software.
-
-
-## Contributing
-
-You are very welcome to contribute with pull requests. When doing so, follow
-these conventions:
-
-### Git commits
-
-* Use [proper commit messages](http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html),
-  in imperative form.
-* Let the Git history of your feature branch follow the
-  [recipe model](http://www.bitsnbites.eu/git-history-work-log-vs-recipe/).
-* If your commit fixes a reported issue, add "Fixes #14" (where "14" is the
-  issue number) on a separate line in the commit message (in the body part of
-  the comment, *not* in the summary part).
-
-These are simple, conventional practices that make it easier to keep track of
-different patches.
-
-* Use spaces for indentation (not tabs).
-* The player routine is special - it is designed and tuned for being as small
-  and easily compressible (e.g. using [GCC](https://developers.google.com/closure/compiler/)
-  and [DEFLATE](https://en.wikipedia.org/wiki/DEFLATE)) as possible. Do not add
-  or alter the player routine without careful consideration.
-
+If licensing becomes important for distribution, review the inherited files
+carefully and treat the legacy code separately from newly added rewrite code.

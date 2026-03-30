@@ -3,7 +3,7 @@ const DEFAULT_PATTERN_ROWS = 16;
 export function createProjectFromForm(form) {
   return {
     mode: form.mode || "random",
-    seed: form.seed || "soundbox-seed",
+    seed: form.seed || "harmonic-seed",
     music: {
       key: form.key || "C",
       scale: form.scale || "major",
