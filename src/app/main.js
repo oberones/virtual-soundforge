@@ -18,12 +18,15 @@ const elements = {
   scale: document.getElementById("scale"),
   tempo: document.getElementById("tempo"),
   bars: document.getElementById("bars"),
+  formStyle: document.getElementById("formStyle"),
   voices: document.getElementById("voices"),
   noteLength: document.getElementById("noteLength"),
   seed: document.getElementById("seed"),
   density: document.getElementById("density"),
   complexity: document.getElementById("complexity"),
   variation: document.getElementById("variation"),
+  drama: document.getElementById("drama"),
+  evolution: document.getElementById("evolution"),
   generateButton: document.getElementById("generateButton"),
   shuffleSeedButton: document.getElementById("shuffleSeedButton"),
   playButton: document.getElementById("playButton"),
@@ -45,12 +48,15 @@ function readForm() {
     scale: elements.scale.value,
     tempo: Number(elements.tempo.value),
     bars: Number(elements.bars.value),
+    formStyle: elements.formStyle.value,
     voices: Number(elements.voices.value),
     noteLength: Number(elements.noteLength.value) / 100,
     seed: elements.seed.value.trim(),
     density: Number(elements.density.value) / 100,
     complexity: Number(elements.complexity.value) / 100,
-    variation: Number(elements.variation.value) / 100
+    variation: Number(elements.variation.value) / 100,
+    drama: Number(elements.drama.value) / 100,
+    evolution: Number(elements.evolution.value) / 100
   };
 }
 

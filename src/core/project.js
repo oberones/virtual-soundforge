@@ -9,6 +9,7 @@ export function createProjectFromForm(form) {
       scale: form.scale || "major",
       tempo: clamp(Math.round(form.tempo || 112), 60, 180),
       bars: clamp(Math.round(form.bars || 8), 4, 16),
+      formStyle: form.formStyle || "balanced",
       voices: clamp(Math.round(form.voices || 3), 1, 6),
       noteLength: clamp(form.noteLength, 0.25, 1),
       beatsPerBar: 4,
@@ -18,7 +19,9 @@ export function createProjectFromForm(form) {
     controls: {
       density: clamp(form.density, 0, 1),
       complexity: clamp(form.complexity, 0, 1),
-      variation: clamp(form.variation, 0, 1)
+      variation: clamp(form.variation, 0, 1),
+      drama: clamp(form.drama, 0, 1),
+      evolution: clamp(form.evolution, 0, 1)
     },
     instrumentation: createHarmonicInstrumentation(
       clamp(Math.round(form.voices || 3), 1, 6)
@@ -34,8 +37,11 @@ export function projectToSummary(project, composition) {
     "Key: " + project.music.key + " " + project.music.scale,
     "Tempo: " + project.music.tempo + " BPM",
     "Bars: " + project.music.bars,
+    "Form: " + project.music.formStyle,
     "Voices: " + project.music.voices,
     "Note length: " + Math.round(project.music.noteLength * 100) + "%",
+    "Drama: " + Math.round(project.controls.drama * 100) + "%",
+    "Evolution: " + Math.round(project.controls.evolution * 100) + "%",
     "Pattern rows: " + project.music.patternRows,
     "Tracks: " + composition.tracks.length,
     "Phrases: " + totalPhrases,

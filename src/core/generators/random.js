@@ -67,7 +67,7 @@ function createProgression(random, scale, bars) {
 
 function createSectionPlan(project, random, scale, totalBars) {
   if (project.mode === "song") {
-    return createSongSectionPlan(random, scale, totalBars);
+    return createSongSectionPlan(project, random, scale, totalBars);
   }
 
   const phraseBars = totalBars >= 8 ? 2 : 1;
@@ -91,8 +91,8 @@ function createSectionPlan(project, random, scale, totalBars) {
   return { sections: sections };
 }
 
-function createSongSectionPlan(random, scale, totalBars) {
-  const templates = chooseSongTemplate(totalBars);
+function createSongSectionPlan(project, random, scale, totalBars) {
+  const templates = chooseSongTemplate(project, totalBars);
   const sections = [];
   let startBar = 0;
 
@@ -102,7 +102,7 @@ function createSongSectionPlan(random, scale, totalBars) {
     }
 
     const lengthBars = Math.min(template.lengthBars, totalBars - startBar);
-    const progression = createRoleProgression(random, scale, template.role, lengthBars);
+    const progression = createRoleProgression(project, random, scale, template.role, lengthBars);
     sections.push({
       id: "section-" + index,
       name: template.label,
@@ -118,7 +118,31 @@ function createSongSectionPlan(random, scale, totalBars) {
   return { sections: sections };
 }
 
-function chooseSongTemplate(totalBars) {
+function chooseSongTemplate(project, totalBars) {
+  const formStyle = project.music.formStyle;
+  if (formStyle === "short") {
+    if (totalBars <= 6) {
+      return [
+        { label: "Verse", role: "verse", lengthBars: Math.max(2, totalBars - 2), phraseBars: 2 },
+        { label: "Chorus", role: "chorus", lengthBars: 2, phraseBars: 1 }
+      ];
+    }
+    return [
+      { label: "Verse", role: "verse", lengthBars: Math.max(4, totalBars - 4), phraseBars: 2 },
+      { label: "Chorus", role: "chorus", lengthBars: 4, phraseBars: 2 }
+    ];
+  }
+
+  if (formStyle === "full" && totalBars >= 10) {
+    return [
+      { label: "Intro", role: "intro", lengthBars: 2, phraseBars: 1 },
+      { label: "Verse", role: "verse", lengthBars: 4, phraseBars: 2 },
+      { label: "Chorus", role: "chorus", lengthBars: 4, phraseBars: 2 },
+      { label: "Bridge", role: "bridge", lengthBars: 2, phraseBars: 2 },
+      { label: "Chorus 2", role: "chorus", lengthBars: Math.max(2, totalBars - 12), phraseBars: 2 }
+    ];
+  }
+
   if (totalBars <= 6) {
     return [
       { label: "Intro", role: "intro", lengthBars: 2, phraseBars: 1 },
@@ -151,8 +175,9 @@ function chooseSongTemplate(totalBars) {
   ];
 }
 
-function createRoleProgression(random, scale, role, bars) {
+function createRoleProgression(project, random, scale, role, bars) {
   const progression = createProgression(random, scale, bars);
+  const drama = project.controls.drama;
 
   if (role === "intro") {
     return progression.map(function (_, index) {
@@ -162,7 +187,7 @@ function createRoleProgression(random, scale, role, bars) {
 
   if (role === "chorus") {
     return progression.map(function (degree, index) {
-      if (index % 2 === 1) {
+      if (index % 2 === 1 || drama > 0.6) {
         return scale === "minor" ? 6 : 5;
       }
       return degree;
@@ -377,7 +402,7 @@ function createPhraseModeDefinition(
   }
 
   const basePhrase = phraseFamily[phraseIndex % phraseFamily.length];
-  const mutationLevel = computeMutationLevel(section, phraseIndex);
+  const mutationLevel = computeMutationLevel(project, section, phraseIndex);
   const notes = mutatePhrase(basePhrase.notes, mutationLevel, instrumentation, section, random);
 
   return notes;
@@ -397,6 +422,9 @@ function createSongPhraseDefinition(
 ) {
   const notes = [];
   let previousMidi = voiceState.lastMidi;
+  if (project.controls.evolution < 0.35 && phraseIndex > 0 && voiceState.phraseTail) {
+    previousMidi = voiceState.phraseTail;
+  }
   for (let localBar = 0; localBar < phraseProgression.length; localBar += 1) {
     const result = createSongBarPattern(
       project,
@@ -418,6 +446,7 @@ function createSongPhraseDefinition(
     previousMidi = result.lastMidi;
   }
   voiceState.lastMidi = previousMidi;
+  voiceState.phraseTail = previousMidi;
   return notes;
 }
 
@@ -481,8 +510,8 @@ function createSongBarPattern(
   random
 ) {
   const baseLength = computeNoteLength(
-    getRoleNoteLength(project.music.noteLength, section.role),
-    section.role !== "intro"
+    getRoleNoteLength(project.music.noteLength, section.role, project.controls.drama),
+    section.role !== "intro" || project.controls.drama > 0.4
   );
   const primaryBase = createVoiceNote(scalePitches, degree, instrumentation.chordTone || 0);
   const secondaryBase = createVoiceNote(scalePitches, degree, (instrumentation.chordTone + 1) % 3);
@@ -514,7 +543,7 @@ function createSongBarPattern(
       midi: primary
     }];
 
-    if ((localBar + phraseIndex) % 2 === 1 || random.chance(0.35 + project.controls.variation * 0.25)) {
+    if ((localBar + phraseIndex) % 2 === 1 || random.chance(0.25 + project.controls.variation * 0.2 + project.controls.evolution * 0.2)) {
       notes.push({
         bar: localBar,
         row: 8,
@@ -541,7 +570,7 @@ function createSongBarPattern(
       {
         bar: localBar,
         row: 6,
-        lengthRows: Math.max(4, Math.round(baseLength * 0.5)),
+        lengthRows: Math.max(4, Math.round(baseLength * (0.45 + project.controls.drama * 0.15))),
         midi: tertiary
       }
     ];
@@ -656,7 +685,7 @@ function mutatePhrase(notes, mutationLevel, instrumentation, section, random) {
       midi: note.midi
     };
 
-    if (mutationLevel >= 1 && index > 0 && random.chance(0.45)) {
+    if (mutationLevel >= 1 && index > 0 && random.chance(0.3 + mutationLevel * 0.04)) {
       next.row = clamp(next.row + 1, 0, 12);
     }
 
@@ -687,8 +716,11 @@ function mutatePhrase(notes, mutationLevel, instrumentation, section, random) {
   });
 }
 
-function computeMutationLevel(section, phraseIndex) {
-  return phraseIndex + section.startBar / Math.max(1, section.phraseBars) + getRoleMutationBias(section.role);
+function computeMutationLevel(project, section, phraseIndex) {
+  return phraseIndex
+    + section.startBar / Math.max(1, section.phraseBars)
+    + getRoleMutationBias(section.role)
+    + project.controls.evolution * 3;
 }
 
 function findNeighborPitch(scalePitches, midi, random) {
@@ -787,10 +819,10 @@ function getRoleMutationBias(role) {
   return 1;
 }
 
-function getRoleNoteLength(noteLength, role) {
+function getRoleNoteLength(noteLength, role, drama) {
   if (role === "intro") return Math.max(0.25, noteLength - 0.18);
-  if (role === "chorus") return Math.min(1, noteLength + 0.12);
-  if (role === "bridge") return Math.max(0.25, noteLength - 0.08);
+  if (role === "chorus") return Math.min(1, noteLength + 0.08 + drama * 0.12);
+  if (role === "bridge") return Math.max(0.25, noteLength - 0.08 + drama * 0.04);
   return noteLength;
 }
 
