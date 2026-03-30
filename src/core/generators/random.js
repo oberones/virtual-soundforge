@@ -509,6 +509,7 @@ function createSongBarPattern(
   cadenceContext,
   random
 ) {
+  const style = project.music.style || "warm";
   const baseLength = computeNoteLength(
     getRoleNoteLength(project.music.noteLength, section.role, project.controls.drama),
     section.role !== "intro" || project.controls.drama > 0.4
@@ -516,7 +517,7 @@ function createSongBarPattern(
   const primaryBase = createVoiceNote(scalePitches, degree, instrumentation.chordTone || 0);
   const secondaryBase = createVoiceNote(scalePitches, degree, (instrumentation.chordTone + 1) % 3);
   const tertiaryBase = createVoiceNote(scalePitches, degree, (instrumentation.chordTone + 2) % 3);
-  const roleOctave = getRoleOctaveShift(section.role, instrumentation.role) * 12;
+  const roleOctave = getRoleOctaveShift(section.role, instrumentation.role, style) * 12;
   const primary = resolveVoiceLedPitch(previousMidi, buildCandidateSet(primaryBase + roleOctave), primaryBase + roleOctave);
   const secondary = resolveVoiceLedPitch(primary, buildCandidateSet(secondaryBase + roleOctave), secondaryBase + roleOctave);
   const tertiary = resolveVoiceLedPitch(secondary, buildCandidateSet(tertiaryBase + roleOctave), tertiaryBase + roleOctave);
@@ -524,7 +525,7 @@ function createSongBarPattern(
   if (section.role === "intro") {
     const notes = [{
         bar: localBar,
-        row: 2,
+        row: style === "dark" ? 3 : 2,
         lengthRows: Math.max(6, baseLength - 2),
         midi: primary
       }];
@@ -538,15 +539,15 @@ function createSongBarPattern(
   if (section.role === "verse") {
     const notes = [{
       bar: localBar,
-      row: localBar % 2 === 0 ? 0 : 1,
-      lengthRows: baseLength,
-      midi: primary
-    }];
+        row: localBar % 2 === 0 ? 0 : (style === "organ" ? 0 : 1),
+        lengthRows: baseLength,
+        midi: primary
+      }];
 
-    if ((localBar + phraseIndex) % 2 === 1 || random.chance(0.25 + project.controls.variation * 0.2 + project.controls.evolution * 0.2)) {
+    if ((localBar + phraseIndex) % 2 === 1 || random.chance(0.25 + project.controls.variation * 0.2 + project.controls.evolution * 0.2 + getStyleSplitBias(style))) {
       notes.push({
         bar: localBar,
-        row: 8,
+        row: style === "dark" ? 9 : 8,
         lengthRows: Math.max(4, Math.round(baseLength * 0.45)),
         midi: secondary
       });
@@ -569,7 +570,7 @@ function createSongBarPattern(
       },
       {
         bar: localBar,
-        row: 6,
+        row: style === "organ" ? 8 : 6,
         lengthRows: Math.max(4, Math.round(baseLength * (0.45 + project.controls.drama * 0.15))),
         midi: tertiary
       }
@@ -591,7 +592,7 @@ function createSongBarPattern(
       },
       {
         bar: localBar,
-        row: 7,
+        row: style === "glassy" ? 6 : 7,
         lengthRows: Math.max(3, Math.round(baseLength * 0.35)),
         midi: tertiary
       },
@@ -841,9 +842,21 @@ function getRoleRowOffset(role, localBar) {
   return 0;
 }
 
-function getRoleOctaveShift(role, trackRole) {
-  if (role === "chorus" && trackRole !== "foundation") return 1;
+function getRoleOctaveShift(role, trackRole, style) {
+  if (role === "chorus" && trackRole !== "foundation") {
+    return style === "dark" ? 0 : 1;
+  }
   if (role === "intro" && trackRole === "foundation") return -1;
+  if (style === "glassy" && trackRole !== "foundation") return 1;
+  if (style === "dark" && trackRole === "glass") return -1;
+  return 0;
+}
+
+function getStyleSplitBias(style) {
+  if (style === "lush") return 0.12;
+  if (style === "glassy") return 0.08;
+  if (style === "organ") return -0.08;
+  if (style === "dark") return -0.04;
   return 0;
 }
 
