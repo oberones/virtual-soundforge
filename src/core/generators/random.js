@@ -219,7 +219,7 @@ function createTrack(project, instrumentation, sectionPlan, phraseLibrary, rando
 }
 
 function createPhraseFamily(project, instrumentation, sectionPlan, scalePitches, random) {
-  if (project.mode !== "phrase" && project.mode !== "song") {
+  if (project.mode !== "phrase") {
     return [];
   }
 
@@ -303,7 +303,17 @@ function createPhraseDefinition(
     "phrase",
     phraseIndex
   ].join("-");
-  const notes = (project.mode === "phrase" || project.mode === "song")
+  const notes = project.mode === "song"
+    ? createSongPhraseDefinition(
+        project,
+        instrumentation,
+        section,
+        phraseIndex,
+        phraseProgression,
+        scalePitches,
+        random
+      )
+    : project.mode === "phrase"
     ? createPhraseModeDefinition(
         project,
         instrumentation,
@@ -357,6 +367,34 @@ function createPhraseModeDefinition(
   return notes;
 }
 
+function createSongPhraseDefinition(
+  project,
+  instrumentation,
+  section,
+  phraseIndex,
+  phraseProgression,
+  scalePitches,
+  random
+) {
+  const notes = [];
+  for (let localBar = 0; localBar < phraseProgression.length; localBar += 1) {
+    notes.push.apply(
+      notes,
+      createSongBarPattern(
+        project,
+        instrumentation,
+        section,
+        phraseIndex,
+        phraseProgression[localBar],
+        localBar,
+        scalePitches,
+        random
+      )
+    );
+  }
+  return notes;
+}
+
 function instantiatePhraseNotes(phraseInstance, phraseLibrary) {
   const phrase = findPhrase(phraseLibrary, phraseInstance.phraseId);
   if (!phrase) {
@@ -402,6 +440,102 @@ function createHarmonicBar(project, instrumentation, degree, localBar, scalePitc
   }
 
   return entries;
+}
+
+function createSongBarPattern(
+  project,
+  instrumentation,
+  section,
+  phraseIndex,
+  degree,
+  localBar,
+  scalePitches,
+  random
+) {
+  const baseLength = computeNoteLength(
+    getRoleNoteLength(project.music.noteLength, section.role),
+    section.role !== "intro"
+  );
+  const primary = createVoiceNote(scalePitches, degree, instrumentation.chordTone || 0);
+  const secondary = createVoiceNote(scalePitches, degree, (instrumentation.chordTone + 1) % 3);
+  const tertiary = createVoiceNote(scalePitches, degree, (instrumentation.chordTone + 2) % 3);
+
+  if (section.role === "intro") {
+    return [{
+      bar: localBar,
+      row: 2,
+      lengthRows: Math.max(6, baseLength - 2),
+      midi: primary
+    }];
+  }
+
+  if (section.role === "verse") {
+    const notes = [{
+      bar: localBar,
+      row: localBar % 2 === 0 ? 0 : 1,
+      lengthRows: baseLength,
+      midi: primary
+    }];
+
+    if ((localBar + phraseIndex) % 2 === 1 || random.chance(0.35 + project.controls.variation * 0.25)) {
+      notes.push({
+        bar: localBar,
+        row: 8,
+        lengthRows: Math.max(4, Math.round(baseLength * 0.45)),
+        midi: secondary
+      });
+    }
+
+    return notes;
+  }
+
+  if (section.role === "chorus") {
+    const lift = instrumentation.role === "foundation" ? 0 : 12;
+    return [
+      {
+        bar: localBar,
+        row: 0,
+        lengthRows: Math.min(15, baseLength + 1),
+        midi: primary + lift
+      },
+      {
+        bar: localBar,
+        row: 6,
+        lengthRows: Math.max(4, Math.round(baseLength * 0.5)),
+        midi: tertiary + lift
+      }
+    ];
+  }
+
+  if (section.role === "bridge") {
+    return [
+      {
+        bar: localBar,
+        row: 1,
+        lengthRows: Math.max(4, Math.round(baseLength * 0.55)),
+        midi: secondary
+      },
+      {
+        bar: localBar,
+        row: 7,
+        lengthRows: Math.max(3, Math.round(baseLength * 0.35)),
+        midi: tertiary
+      },
+      {
+        bar: localBar,
+        row: 11,
+        lengthRows: 3,
+        midi: findNeighborPitch(scalePitches, primary, random)
+      }
+    ];
+  }
+
+  return [{
+    bar: localBar,
+    row: 0,
+    lengthRows: baseLength,
+    midi: primary
+  }];
 }
 
 function findPhrase(phraseLibrary, phraseId) {
