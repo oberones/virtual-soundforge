@@ -186,6 +186,9 @@ function createTrack(project, instrumentation, sectionPlan, phraseLibrary, rando
   const phrases = [];
   const notes = [];
   const phraseFamily = createPhraseFamily(project, instrumentation, sectionPlan, scalePitches, random);
+  const voiceState = {
+    lastMidi: null
+  };
 
   sectionPlan.sections.forEach(function (section) {
     const sectionPhrases = createSectionPhrases(
@@ -195,6 +198,7 @@ function createTrack(project, instrumentation, sectionPlan, phraseLibrary, rando
       scalePitches,
       phraseFamily,
       phraseLibrary,
+      voiceState,
       random
     );
     phrases.push.apply(phrases, sectionPhrases);
@@ -255,6 +259,7 @@ function createSectionPhrases(
   scalePitches,
   phraseFamily,
   phraseLibrary,
+  voiceState,
   random
 ) {
   const phrases = [];
@@ -271,6 +276,7 @@ function createSectionPhrases(
       scalePitches,
       phraseFamily,
       phraseLibrary,
+      voiceState,
       random
     );
 
@@ -295,6 +301,7 @@ function createPhraseDefinition(
   scalePitches,
   phraseFamily,
   phraseLibrary,
+  voiceState,
   random
 ) {
   const phraseId = [
@@ -311,6 +318,7 @@ function createPhraseDefinition(
         phraseIndex,
         phraseProgression,
         scalePitches,
+        voiceState,
         random
       )
     : project.mode === "phrase"
@@ -374,24 +382,27 @@ function createSongPhraseDefinition(
   phraseIndex,
   phraseProgression,
   scalePitches,
+  voiceState,
   random
 ) {
   const notes = [];
+  let previousMidi = voiceState.lastMidi;
   for (let localBar = 0; localBar < phraseProgression.length; localBar += 1) {
-    notes.push.apply(
-      notes,
-      createSongBarPattern(
-        project,
-        instrumentation,
-        section,
-        phraseIndex,
-        phraseProgression[localBar],
-        localBar,
-        scalePitches,
-        random
-      )
+    const result = createSongBarPattern(
+      project,
+      instrumentation,
+      section,
+      phraseIndex,
+      phraseProgression[localBar],
+      localBar,
+      scalePitches,
+      previousMidi,
+      random
     );
+    notes.push.apply(notes, result.notes);
+    previousMidi = result.lastMidi;
   }
+  voiceState.lastMidi = previousMidi;
   return notes;
 }
 
@@ -450,23 +461,31 @@ function createSongBarPattern(
   degree,
   localBar,
   scalePitches,
+  previousMidi,
   random
 ) {
   const baseLength = computeNoteLength(
     getRoleNoteLength(project.music.noteLength, section.role),
     section.role !== "intro"
   );
-  const primary = createVoiceNote(scalePitches, degree, instrumentation.chordTone || 0);
-  const secondary = createVoiceNote(scalePitches, degree, (instrumentation.chordTone + 1) % 3);
-  const tertiary = createVoiceNote(scalePitches, degree, (instrumentation.chordTone + 2) % 3);
+  const primaryBase = createVoiceNote(scalePitches, degree, instrumentation.chordTone || 0);
+  const secondaryBase = createVoiceNote(scalePitches, degree, (instrumentation.chordTone + 1) % 3);
+  const tertiaryBase = createVoiceNote(scalePitches, degree, (instrumentation.chordTone + 2) % 3);
+  const roleOctave = getRoleOctaveShift(section.role, instrumentation.role) * 12;
+  const primary = resolveVoiceLedPitch(previousMidi, buildCandidateSet(primaryBase + roleOctave), primaryBase + roleOctave);
+  const secondary = resolveVoiceLedPitch(primary, buildCandidateSet(secondaryBase + roleOctave), secondaryBase + roleOctave);
+  const tertiary = resolveVoiceLedPitch(secondary, buildCandidateSet(tertiaryBase + roleOctave), tertiaryBase + roleOctave);
 
   if (section.role === "intro") {
-    return [{
-      bar: localBar,
-      row: 2,
-      lengthRows: Math.max(6, baseLength - 2),
-      midi: primary
-    }];
+    return {
+      notes: [{
+        bar: localBar,
+        row: 2,
+        lengthRows: Math.max(6, baseLength - 2),
+        midi: primary
+      }],
+      lastMidi: primary
+    };
   }
 
   if (section.role === "verse") {
@@ -486,29 +505,35 @@ function createSongBarPattern(
       });
     }
 
-    return notes;
+    return {
+      notes: notes,
+      lastMidi: notes[notes.length - 1].midi
+    };
   }
 
   if (section.role === "chorus") {
-    const lift = instrumentation.role === "foundation" ? 0 : 12;
-    return [
+    const notes = [
       {
         bar: localBar,
         row: 0,
         lengthRows: Math.min(15, baseLength + 1),
-        midi: primary + lift
+        midi: primary
       },
       {
         bar: localBar,
         row: 6,
         lengthRows: Math.max(4, Math.round(baseLength * 0.5)),
-        midi: tertiary + lift
+        midi: tertiary
       }
     ];
+    return {
+      notes: notes,
+      lastMidi: notes[notes.length - 1].midi
+    };
   }
 
   if (section.role === "bridge") {
-    return [
+    const notes = [
       {
         bar: localBar,
         row: 1,
@@ -525,17 +550,24 @@ function createSongBarPattern(
         bar: localBar,
         row: 11,
         lengthRows: 3,
-        midi: findNeighborPitch(scalePitches, primary, random)
+        midi: resolveVoiceLedPitch(tertiary, buildCandidateSet(findNeighborPitch(scalePitches, primary, random)), primary)
       }
     ];
+    return {
+      notes: notes,
+      lastMidi: notes[notes.length - 1].midi
+    };
   }
 
-  return [{
-    bar: localBar,
-    row: 0,
-    lengthRows: baseLength,
-    midi: primary
-  }];
+  return {
+    notes: [{
+      bar: localBar,
+      row: 0,
+      lengthRows: baseLength,
+      midi: primary
+    }],
+    lastMidi: primary
+  };
 }
 
 function findPhrase(phraseLibrary, phraseId) {
@@ -643,6 +675,30 @@ function findNeighborPitch(scalePitches, midi, random) {
   }
   const move = random.chance(0.5) ? 1 : -1;
   return scalePitches[clamp(idx + move, 0, scalePitches.length - 1)];
+}
+
+function buildCandidateSet(baseMidi) {
+  return [baseMidi - 12, baseMidi, baseMidi + 12];
+}
+
+function resolveVoiceLedPitch(previousMidi, candidates, preferredMidi) {
+  if (previousMidi == null) {
+    return preferredMidi;
+  }
+
+  let best = candidates[0];
+  let bestScore = Infinity;
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    const candidate = candidates[index];
+    const score = Math.abs(candidate - previousMidi) + Math.abs(candidate - preferredMidi) * 0.2;
+    if (score < bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  return best;
 }
 
 function getRoleMutationBias(role) {
