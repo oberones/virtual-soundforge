@@ -19,9 +19,45 @@ export function createProjectFromForm(form) {
       variation: clamp(form.variation, 0, 1)
     },
     instrumentation: [
-      { role: "lead", presetQuery: "Softy", octaveBase: 5 },
-      { role: "bass", presetQuery: "Filter Bass 1", octaveBase: 3 },
-      { role: "pad", presetQuery: "Mellow", octaveBase: 4 }
+      {
+        role: "lead",
+        presetQuery: "Softy",
+        octaveBase: 5,
+        voicing: {
+          attack: 10,
+          sustain: 42,
+          release: 52,
+          drive: 40,
+          panAmount: 72,
+          delayAmount: 84
+        }
+      },
+      {
+        role: "bass",
+        presetQuery: "Filter Bass 1",
+        octaveBase: 3,
+        voicing: {
+          attack: 4,
+          sustain: 28,
+          release: 34,
+          drive: 52,
+          panAmount: 20,
+          delayAmount: 24
+        }
+      },
+      {
+        role: "pad",
+        presetQuery: "Mellow",
+        octaveBase: 4,
+        voicing: {
+          attack: 18,
+          sustain: 64,
+          release: 72,
+          drive: 34,
+          panAmount: 96,
+          delayAmount: 110
+        }
+      }
     ]
   };
 }
