@@ -3,6 +3,14 @@ import { midiToSoundBoxNote } from "../music-theory.js";
 const MAX_CHANNELS = 16;
 const DEFAULT_ROWS_PER_BEAT = 4;
 const DEFAULT_MAX_PATTERNS = 36;
+const OSC1_VOL = 1;
+const OSC2_VOL = 5;
+const ENV_ATTACK = 10;
+const ENV_SUSTAIN = 11;
+const ENV_RELEASE = 12;
+const FX_DRIVE = 24;
+const FX_PAN_AMT = 25;
+const FX_DELAY_AMT = 27;
 
 export function compositionToSoundBoxSong(composition) {
   const tempo = composition.tempo;
@@ -23,8 +31,10 @@ export function compositionToSoundBoxSong(composition) {
 
 function buildChannel(track, endPattern, patternLen) {
   const preset = findPreset(track.instrument.presetQuery);
+  const instrument = cloneInstrument(preset.i);
+  applyVoicing(instrument, track.instrument.voicing);
   const channel = {
-    i: cloneInstrument(preset.i),
+    i: instrument,
     p: [],
     c: []
   };
@@ -97,6 +107,21 @@ function findPreset(query) {
 
 function cloneInstrument(instrument) {
   return instrument.slice();
+}
+
+function applyVoicing(instrument, voicing) {
+  if (!voicing) {
+    return;
+  }
+
+  instrument[ENV_ATTACK] = voicing.attack;
+  instrument[ENV_SUSTAIN] = voicing.sustain;
+  instrument[ENV_RELEASE] = voicing.release;
+  instrument[FX_DRIVE] = voicing.drive;
+  instrument[FX_PAN_AMT] = voicing.panAmount;
+  instrument[FX_DELAY_AMT] = voicing.delayAmount;
+  instrument[OSC1_VOL] = Math.min(255, instrument[OSC1_VOL] + 18);
+  instrument[OSC2_VOL] = Math.min(255, instrument[OSC2_VOL] + 18);
 }
 
 function calcSamplesPerRow(bpm) {

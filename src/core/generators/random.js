@@ -76,7 +76,8 @@ function createTrack(project, instrumentation, progression, random) {
     role: instrumentation.role,
     instrument: {
       presetQuery: instrumentation.presetQuery,
-      presetName: instrumentation.presetQuery
+      presetName: instrumentation.presetQuery,
+      voicing: instrumentation.voicing || null
     },
     notes: notes
   };
@@ -101,7 +102,7 @@ function createLeadBar(project, degree, bar, scalePitches, random) {
     notes.push({
       bar: bar,
       row: step,
-      lengthRows: random.chance(0.2 + complexity * 0.4) ? 2 : 1,
+      lengthRows: random.chance(0.2 + complexity * 0.4) ? 3 : 2,
       midi: scalePitches[index]
     });
   });
@@ -125,7 +126,7 @@ function createBassBar(project, degree, bar, scalePitches, random) {
     return {
       bar: bar,
       row: item.row,
-      lengthRows: 2,
+      lengthRows: 4,
       midi: item.midi
     };
   });
@@ -138,9 +139,9 @@ function createPadBar(project, degree, bar, scalePitches, random) {
   const row = random.chance(project.controls.variation * 0.5) ? 4 : 0;
 
   return [
-    { bar: bar, row: row, lengthRows: 8, midi: scalePitches[rootIndex] },
-    { bar: bar, row: row, lengthRows: 8, midi: scalePitches[thirdIndex] },
-    { bar: bar, row: row, lengthRows: 8, midi: scalePitches[fifthIndex] }
+    { bar: bar, row: row, lengthRows: 12, midi: scalePitches[rootIndex] },
+    { bar: bar, row: row, lengthRows: 12, midi: scalePitches[thirdIndex] },
+    { bar: bar, row: row, lengthRows: 12, midi: scalePitches[fifthIndex] }
   ];
 }
 
