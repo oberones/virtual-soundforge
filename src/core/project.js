@@ -10,6 +10,7 @@ export function createProjectFromForm(form) {
       tempo: clamp(Math.round(form.tempo || 112), 60, 180),
       bars: clamp(Math.round(form.bars || 8), 4, 16),
       voices: clamp(Math.round(form.voices || 3), 1, 6),
+      noteLength: clamp(form.noteLength, 0.25, 1),
       beatsPerBar: 4,
       rowsPerBeat: 4,
       patternRows: DEFAULT_PATTERN_ROWS
@@ -33,6 +34,7 @@ export function projectToSummary(project, composition) {
     "Tempo: " + project.music.tempo + " BPM",
     "Bars: " + project.music.bars,
     "Voices: " + project.music.voices,
+    "Note length: " + Math.round(project.music.noteLength * 100) + "%",
     "Pattern rows: " + project.music.patternRows,
     "Tracks: " + composition.tracks.length,
     "Sections: " + composition.sections.map(function (section) {
