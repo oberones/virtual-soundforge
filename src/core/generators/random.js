@@ -6,7 +6,7 @@ export function createRandomGenerator() {
     generate(project) {
       const random = createSeededRandom(project.seed);
       const bars = project.music.bars;
-      const sectionPlan = createSectionPlan(random, project.music.scale, bars);
+      const sectionPlan = createSectionPlan(project, random, project.music.scale, bars);
       const phraseLibrary = [];
       const tracks = project.instrumentation.map(function (instrumentation) {
         return createTrack(project, instrumentation, sectionPlan, phraseLibrary, random);
@@ -25,6 +25,7 @@ export function createRandomGenerator() {
           sectionPlan: sectionPlan.sections.map(function (section) {
             return {
               id: section.id,
+              role: section.role,
               progression: section.progression,
               phraseBars: section.phraseBars
             };
@@ -64,7 +65,11 @@ function createProgression(random, scale, bars) {
   return progression;
 }
 
-function createSectionPlan(random, scale, totalBars) {
+function createSectionPlan(project, random, scale, totalBars) {
+  if (project.mode === "song") {
+    return createSongSectionPlan(random, scale, totalBars);
+  }
+
   const phraseBars = totalBars >= 8 ? 2 : 1;
   const sectionBars = totalBars >= 12 ? 4 : totalBars;
   const baseProgression = createProgression(random, scale, totalBars);
@@ -75,6 +80,7 @@ function createSectionPlan(random, scale, totalBars) {
     sections.push({
       id: "section-" + sectionIndex,
       name: String.fromCharCode(65 + sectionIndex),
+      role: "part",
       startBar: bar,
       lengthBars: lengthBars,
       phraseBars: Math.min(phraseBars, lengthBars),
@@ -83,6 +89,91 @@ function createSectionPlan(random, scale, totalBars) {
   }
 
   return { sections: sections };
+}
+
+function createSongSectionPlan(random, scale, totalBars) {
+  const templates = chooseSongTemplate(totalBars);
+  const sections = [];
+  let startBar = 0;
+
+  templates.forEach(function (template, index) {
+    if (startBar >= totalBars) {
+      return;
+    }
+
+    const lengthBars = Math.min(template.lengthBars, totalBars - startBar);
+    const progression = createRoleProgression(random, scale, template.role, lengthBars);
+    sections.push({
+      id: "section-" + index,
+      name: template.label,
+      role: template.role,
+      startBar: startBar,
+      lengthBars: lengthBars,
+      phraseBars: Math.min(template.phraseBars, lengthBars),
+      progression: progression
+    });
+    startBar += lengthBars;
+  });
+
+  return { sections: sections };
+}
+
+function chooseSongTemplate(totalBars) {
+  if (totalBars <= 6) {
+    return [
+      { label: "Intro", role: "intro", lengthBars: 2, phraseBars: 1 },
+      { label: "Verse", role: "verse", lengthBars: Math.max(2, totalBars - 2), phraseBars: 2 }
+    ];
+  }
+
+  if (totalBars <= 8) {
+    return [
+      { label: "Verse", role: "verse", lengthBars: 4, phraseBars: 2 },
+      { label: "Chorus", role: "chorus", lengthBars: totalBars - 4, phraseBars: 2 }
+    ];
+  }
+
+  if (totalBars <= 12) {
+    return [
+      { label: "Intro", role: "intro", lengthBars: 2, phraseBars: 1 },
+      { label: "Verse", role: "verse", lengthBars: 4, phraseBars: 2 },
+      { label: "Chorus", role: "chorus", lengthBars: 4, phraseBars: 2 },
+      { label: "Bridge", role: "bridge", lengthBars: Math.max(2, totalBars - 10), phraseBars: 2 }
+    ];
+  }
+
+  return [
+    { label: "Intro", role: "intro", lengthBars: 2, phraseBars: 1 },
+    { label: "Verse", role: "verse", lengthBars: 4, phraseBars: 2 },
+    { label: "Chorus", role: "chorus", lengthBars: 4, phraseBars: 2 },
+    { label: "Verse 2", role: "verse", lengthBars: 4, phraseBars: 2 },
+    { label: "Chorus 2", role: "chorus", lengthBars: Math.max(2, totalBars - 14), phraseBars: 2 }
+  ];
+}
+
+function createRoleProgression(random, scale, role, bars) {
+  const progression = createProgression(random, scale, bars);
+
+  if (role === "intro") {
+    return progression.map(function (_, index) {
+      return index === 0 ? 0 : progression[index - 1];
+    });
+  }
+
+  if (role === "chorus") {
+    return progression.map(function (degree, index) {
+      if (index % 2 === 1) {
+        return scale === "minor" ? 6 : 5;
+      }
+      return degree;
+    });
+  }
+
+  if (role === "bridge") {
+    return progression.slice().reverse();
+  }
+
+  return progression;
 }
 
 function createTrack(project, instrumentation, sectionPlan, phraseLibrary, random) {
@@ -128,7 +219,7 @@ function createTrack(project, instrumentation, sectionPlan, phraseLibrary, rando
 }
 
 function createPhraseFamily(project, instrumentation, sectionPlan, scalePitches, random) {
-  if (project.mode !== "phrase") {
+  if (project.mode !== "phrase" && project.mode !== "song") {
     return [];
   }
 
@@ -148,7 +239,8 @@ function createPhraseFamily(project, instrumentation, sectionPlan, scalePitches,
       lengthBars: phraseBars,
       notes: createPhrasePattern(project, instrumentation, phraseProgression, scalePitches, random, {
         octaveShift: index === 1 ? 1 : 0,
-        rowOffset: index === 1 ? 1 : 0
+        rowOffset: index === 1 ? 1 : 0,
+        role: baseSection.role
       })
     });
   }
@@ -211,7 +303,7 @@ function createPhraseDefinition(
     "phrase",
     phraseIndex
   ].join("-");
-  const notes = project.mode === "phrase"
+  const notes = (project.mode === "phrase" || project.mode === "song")
     ? createPhraseModeDefinition(
         project,
         instrumentation,
@@ -260,7 +352,7 @@ function createPhraseModeDefinition(
 
   const basePhrase = phraseFamily[phraseIndex % phraseFamily.length];
   const mutationLevel = computeMutationLevel(section, phraseIndex);
-  const notes = mutatePhrase(basePhrase.notes, mutationLevel, instrumentation, random);
+  const notes = mutatePhrase(basePhrase.notes, mutationLevel, instrumentation, section, random);
 
   return notes;
 }
@@ -333,15 +425,22 @@ function createPhrasePattern(project, instrumentation, phraseProgression, scaleP
   const pattern = [];
   const rowOffset = options.rowOffset || 0;
   const octaveShift = options.octaveShift || 0;
+  const role = options.role || "part";
 
   for (let localBar = 0; localBar < phraseProgression.length; localBar += 1) {
     const degree = phraseProgression[localBar];
-    const voiceNote = createVoiceNote(scalePitches, degree, instrumentation.chordTone || 0) + octaveShift * 12;
-    const shouldSplit = project.controls.complexity > 0.55 && random.chance(0.5);
-    const baseLength = computeNoteLength(project.music.noteLength, shouldSplit);
+    const roleShift = getRoleOctaveShift(role, instrumentation.role);
+    const voiceNote = createVoiceNote(
+      scalePitches,
+      degree,
+      instrumentation.chordTone || 0
+    ) + octaveShift * 12 + roleShift * 12;
+    const shouldSplit = project.controls.complexity > 0.55 && random.chance(getRoleSplitChance(role));
+    const baseLength = computeNoteLength(getRoleNoteLength(project.music.noteLength, role), shouldSplit);
+    const entryRow = clamp(rowOffset + getRoleRowOffset(role, localBar), 0, 8);
     pattern.push({
       bar: localBar,
-      row: clamp(rowOffset, 0, 6),
+      row: entryRow,
       lengthRows: baseLength,
       midi: voiceNote
     });
@@ -349,7 +448,7 @@ function createPhrasePattern(project, instrumentation, phraseProgression, scaleP
     if (shouldSplit) {
       pattern.push({
         bar: localBar,
-        row: 8 + rowOffset,
+        row: clamp(8 + rowOffset + (role === "chorus" ? -1 : 0), 6, 12),
         lengthRows: Math.max(4, Math.round(baseLength * 0.5)),
         midi: findNeighborPitch(scalePitches, voiceNote, random)
       });
@@ -359,7 +458,7 @@ function createPhrasePattern(project, instrumentation, phraseProgression, scaleP
   return pattern;
 }
 
-function mutatePhrase(notes, mutationLevel, instrumentation, random) {
+function mutatePhrase(notes, mutationLevel, instrumentation, section, random) {
   return notes.map(function (note, index) {
     const next = {
       bar: note.bar,
@@ -384,12 +483,23 @@ function mutatePhrase(notes, mutationLevel, instrumentation, random) {
       next.midi += instrumentation.chordTone === 0 ? 12 : -12;
     }
 
+    if (section.role === "intro") {
+      next.lengthRows = Math.max(4, next.lengthRows - 2);
+    } else if (section.role === "chorus") {
+      next.lengthRows = clamp(next.lengthRows + 1, 4, 15);
+      if (random.chance(0.35)) {
+        next.midi += 12;
+      }
+    } else if (section.role === "bridge" && random.chance(0.4)) {
+      next.midi += random.chance(0.5) ? 1 : -1;
+    }
+
     return next;
   });
 }
 
 function computeMutationLevel(section, phraseIndex) {
-  return phraseIndex + section.startBar / Math.max(1, section.phraseBars);
+  return phraseIndex + section.startBar / Math.max(1, section.phraseBars) + getRoleMutationBias(section.role);
 }
 
 function findNeighborPitch(scalePitches, midi, random) {
@@ -399,6 +509,42 @@ function findNeighborPitch(scalePitches, midi, random) {
   }
   const move = random.chance(0.5) ? 1 : -1;
   return scalePitches[clamp(idx + move, 0, scalePitches.length - 1)];
+}
+
+function getRoleMutationBias(role) {
+  if (role === "intro") return 0;
+  if (role === "verse") return 1;
+  if (role === "chorus") return 2;
+  if (role === "bridge") return 3;
+  return 1;
+}
+
+function getRoleNoteLength(noteLength, role) {
+  if (role === "intro") return Math.max(0.25, noteLength - 0.18);
+  if (role === "chorus") return Math.min(1, noteLength + 0.12);
+  if (role === "bridge") return Math.max(0.25, noteLength - 0.08);
+  return noteLength;
+}
+
+function getRoleSplitChance(role) {
+  if (role === "intro") return 0.25;
+  if (role === "verse") return 0.45;
+  if (role === "chorus") return 0.7;
+  if (role === "bridge") return 0.55;
+  return 0.45;
+}
+
+function getRoleRowOffset(role, localBar) {
+  if (role === "intro") return localBar === 0 ? 2 : 1;
+  if (role === "chorus") return localBar % 2 === 0 ? 0 : 1;
+  if (role === "bridge") return 1;
+  return 0;
+}
+
+function getRoleOctaveShift(role, trackRole) {
+  if (role === "chorus" && trackRole !== "foundation") return 1;
+  if (role === "intro" && trackRole === "foundation") return -1;
+  return 0;
 }
 
 function clamp(value, min, max) {
