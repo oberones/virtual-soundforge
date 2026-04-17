@@ -2,6 +2,7 @@ const LOOKAHEAD_SECONDS = 0.18;
 const SCHEDULER_INTERVAL_MS = 40;
 const START_DELAY_SECONDS = 0.05;
 const STOP_FADE_SECONDS = 0.08;
+const SCHEDULE_SAFETY_SECONDS = 0.02;
 
 export function createLivePlaybackEngine() {
   let audioContext = null;
@@ -106,12 +107,26 @@ export function createLivePlaybackEngine() {
       return;
     }
 
+    catchUpScheduler();
+
     const scheduleUntil = audioContext.currentTime + LOOKAHEAD_SECONDS;
     while (nextRowTime < scheduleUntil) {
       scheduleRow(prepared, nextRowIndex, nextRowTime, audioContext, sessionGain);
       nextRowTime += prepared.rowDuration;
       nextRowIndex = (nextRowIndex + 1) % prepared.totalRows;
     }
+  }
+
+  function catchUpScheduler() {
+    const minimumScheduleTime = audioContext.currentTime + SCHEDULE_SAFETY_SECONDS;
+
+    if (nextRowTime >= minimumScheduleTime) {
+      return;
+    }
+
+    const rowsBehind = Math.floor((minimumScheduleTime - nextRowTime) / prepared.rowDuration) + 1;
+    nextRowIndex = (nextRowIndex + rowsBehind) % prepared.totalRows;
+    nextRowTime += rowsBehind * prepared.rowDuration;
   }
 }
 
