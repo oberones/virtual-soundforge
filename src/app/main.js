@@ -3,25 +3,19 @@ import {
   projectToSummary
 } from "../core/project.js";
 import { createRandomGenerator } from "../core/generators/random.js";
-import {
-  renderCompositionToLoop,
-  renderCompositionToWave
-} from "../core/render/simple-synth.js";
+import { renderCompositionToWave } from "../core/render/simple-synth.js";
 import { renderCompositionToMidi } from "../core/render/midi-export.js";
+import { createLivePlaybackEngine } from "../core/render/live-synth.js";
 import { saveLatestSnapshot } from "../core/storage/session.js";
 
-const LIVE_UPDATE_DELAY_MS = 180;
-const FADE_SECONDS = 0.06;
+const LIVE_UPDATE_DELAY_MS = 140;
 
 const state = {
   project: null,
   composition: null,
-  audioContext: null,
-  currentSource: null,
-  currentGain: null,
   isPlaying: false,
   liveUpdateTimer: null,
-  renderRevision: 0
+  playback: createLivePlaybackEngine()
 };
 
 const elements = {
@@ -74,8 +68,8 @@ function setStatus(message) {
 function updateTransportUi() {
   elements.playButton.textContent = state.isPlaying ? "Stop Loop" : "Start Loop";
   elements.transportHint.textContent = state.isPlaying
-    ? "Looping live. Adjust the controls to hear changes in place."
-    : "Press Start Loop to begin continuous playback. Changing controls will update the next loop live.";
+    ? "Looping live. Changing settings now updates the upcoming notes without restarting the transport."
+    : "Press Start Loop to begin continuous playback. Once running, control changes will reshape the upcoming notes live.";
 }
 
 function readForm() {
@@ -118,102 +112,33 @@ function generateComposition() {
   updateUi();
 }
 
-async function ensureAudioContext() {
-  if (!state.audioContext) {
-    state.audioContext = new window.AudioContext();
+function clearLiveUpdateTimer() {
+  if (state.liveUpdateTimer != null) {
+    window.clearTimeout(state.liveUpdateTimer);
+    state.liveUpdateTimer = null;
   }
-
-  if (state.audioContext.state === "suspended") {
-    await state.audioContext.resume();
-  }
-
-  return state.audioContext;
 }
 
-function createAudioBufferFromLoop(context, composition) {
-  const stereo = renderCompositionToLoop(composition);
-  const frameCount = stereo.left.length;
-  const buffer = context.createBuffer(2, frameCount, stereo.sampleRate);
-  buffer.copyToChannel(stereo.left, 0);
-  buffer.copyToChannel(stereo.right, 1);
-  return buffer;
-}
+function applyLiveUpdate(source) {
+  generateComposition();
 
-function fadeOutCurrentSource(context) {
-  if (!state.currentSource || !state.currentGain) {
-    return;
+  if (state.isPlaying) {
+    state.playback.updateComposition(state.composition);
+    setStatus(source === "manual"
+      ? "Composition updated. Upcoming notes now use the new settings."
+      : "Live changes applied. Upcoming notes now reflect the new settings.");
+  } else {
+    setStatus(source === "manual"
+      ? "Composition regenerated."
+      : "Parameters updated. Press Start Loop to hear the new pattern.");
   }
-
-  const stopAt = context.currentTime + FADE_SECONDS;
-  state.currentGain.gain.cancelScheduledValues(context.currentTime);
-  state.currentGain.gain.setValueAtTime(state.currentGain.gain.value, context.currentTime);
-  state.currentGain.gain.linearRampToValueAtTime(0.0001, stopAt);
-  state.currentSource.stop(stopAt + 0.01);
-  state.currentSource = null;
-  state.currentGain = null;
-}
-
-function swapLoopSource(buffer) {
-  const context = state.audioContext;
-  const now = context.currentTime;
-  const startAt = now + 0.01;
-  const source = context.createBufferSource();
-  const gain = context.createGain();
-
-  source.buffer = buffer;
-  source.loop = true;
-  source.loopStart = 0;
-  source.loopEnd = buffer.duration;
-  gain.gain.setValueAtTime(0.0001, startAt);
-
-  source.connect(gain);
-  gain.connect(context.destination);
-  source.start(startAt);
-  gain.gain.exponentialRampToValueAtTime(1, startAt + FADE_SECONDS);
-
-  if (state.currentSource && state.currentGain) {
-    const oldSource = state.currentSource;
-    const oldGain = state.currentGain;
-    oldGain.gain.cancelScheduledValues(now);
-    oldGain.gain.setValueAtTime(Math.max(0.0001, oldGain.gain.value), now);
-    oldGain.gain.exponentialRampToValueAtTime(0.0001, now + FADE_SECONDS);
-    oldSource.stop(now + FADE_SECONDS + 0.01);
-  }
-
-  state.currentSource = source;
-  state.currentGain = gain;
-}
-
-async function refreshLiveLoop(statusMessage) {
-  if (!state.composition || !state.isPlaying) {
-    return;
-  }
-
-  const revision = state.renderRevision + 1;
-  state.renderRevision = revision;
-  const context = await ensureAudioContext();
-  setStatus(statusMessage || "Updating live loop...");
-
-  window.setTimeout(function () {
-    if (revision !== state.renderRevision || !state.isPlaying) {
-      return;
-    }
-
-    const buffer = createAudioBufferFromLoop(context, state.composition);
-    swapLoopSource(buffer);
-    setStatus("Live loop updated.");
-  }, 0);
 }
 
 function scheduleLiveUpdate() {
-  window.clearTimeout(state.liveUpdateTimer);
+  clearLiveUpdateTimer();
   state.liveUpdateTimer = window.setTimeout(function () {
-    generateComposition();
-    if (state.isPlaying) {
-      refreshLiveLoop("Regenerating loop...");
-    } else {
-      setStatus("Parameters updated. Press Start Loop to hear the new pattern.");
-    }
+    state.liveUpdateTimer = null;
+    applyLiveUpdate("auto");
   }, LIVE_UPDATE_DELAY_MS);
 }
 
@@ -223,39 +148,33 @@ async function toggleLoopPlayback() {
     return;
   }
 
+  clearLiveUpdateTimer();
   if (!state.composition) {
     generateComposition();
   }
 
-  await ensureAudioContext();
-  state.isPlaying = true;
-  updateTransportUi();
-  refreshLiveLoop("Starting live loop...");
-}
-
-function stopLoopPlayback() {
-  if (!state.audioContext) {
-    state.isPlaying = false;
-    updateTransportUi();
-    setStatus("Loop stopped.");
+  const started = await state.playback.start(state.composition);
+  if (!started) {
+    setStatus("Nothing to play yet.");
     return;
   }
 
+  state.isPlaying = true;
+  updateTransportUi();
+  setStatus("Transport running. Upcoming notes will update live as you change the controls.");
+}
+
+function stopLoopPlayback() {
+  clearLiveUpdateTimer();
+  state.playback.stop();
   state.isPlaying = false;
-  state.renderRevision += 1;
-  fadeOutCurrentSource(state.audioContext);
   updateTransportUi();
   setStatus("Loop stopped.");
 }
 
 function generateNow() {
-  window.clearTimeout(state.liveUpdateTimer);
-  generateComposition();
-  if (state.isPlaying) {
-    refreshLiveLoop("Regenerating loop...");
-  } else {
-    setStatus("Composition regenerated.");
-  }
+  clearLiveUpdateTimer();
+  applyLiveUpdate("manual");
 }
 
 function exportWave() {
@@ -293,8 +212,7 @@ function exportMidi() {
 }
 
 function randomSeed() {
-  const value = Math.random().toString(36).slice(2, 10);
-  elements.seed.value = value;
+  elements.seed.value = Math.random().toString(36).slice(2, 10);
   generateNow();
 }
 
@@ -311,4 +229,4 @@ elements.exportMidiButton.addEventListener("click", exportMidi);
 
 generateComposition();
 updateTransportUi();
-setStatus("Ready for live looping.");
+setStatus("Ready for live transport playback.");
