@@ -48,12 +48,21 @@ useful historical context while the rewrite continues.
 
 ## Running Locally
 
-Serve the repository from a local web server:
+Use the Makefile dev server:
 
 ```bash
 cd /path/to/soundbox
-python -m http.server 8008
+make serve
 ```
+
+You can override the bind address or port if needed:
+
+```bash
+make serve PORT=9000 HOST=0.0.0.0
+```
+
+The underlying server is Python's built-in `http.server`, so you can also run
+that directly if you prefer.
 
 Then open:
 
