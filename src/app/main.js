@@ -156,6 +156,7 @@ function fadeOutCurrentSource(context) {
 function swapLoopSource(buffer) {
   const context = state.audioContext;
   const now = context.currentTime;
+  const startAt = now + 0.01;
   const source = context.createBufferSource();
   const gain = context.createGain();
 
@@ -163,12 +164,12 @@ function swapLoopSource(buffer) {
   source.loop = true;
   source.loopStart = 0;
   source.loopEnd = buffer.duration;
-  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.setValueAtTime(0.0001, startAt);
 
   source.connect(gain);
   gain.connect(context.destination);
-  source.start(now + 0.01);
-  gain.gain.exponentialRampToValueAtTime(1, now + FADE_SECONDS);
+  source.start(startAt);
+  gain.gain.exponentialRampToValueAtTime(1, startAt + FADE_SECONDS);
 
   if (state.currentSource && state.currentGain) {
     const oldSource = state.currentSource;
@@ -271,7 +272,7 @@ function exportWave() {
   link.click();
   window.setTimeout(function () {
     URL.revokeObjectURL(url);
-  }, 0);
+  }, 1000);
 }
 
 function exportMidi() {
@@ -288,7 +289,7 @@ function exportMidi() {
   link.click();
   window.setTimeout(function () {
     URL.revokeObjectURL(url);
-  }, 0);
+  }, 1000);
 }
 
 function randomSeed() {
