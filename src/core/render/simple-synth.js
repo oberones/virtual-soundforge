@@ -1,23 +1,48 @@
 const SAMPLE_RATE = 44100;
 
 export function renderCompositionToWave(composition) {
+  const stereo = renderCompositionToStereo(composition, {
+    loop: false,
+    tailSeconds: 2.4
+  });
+  return createWaveFile(stereo.left, stereo.right);
+}
+
+export function renderCompositionToLoop(composition) {
+  return renderCompositionToStereo(composition, {
+    loop: true,
+    tailSeconds: 0
+  });
+}
+
+function renderCompositionToStereo(composition, options) {
   const rowDuration = 60 / composition.tempo / 4;
   const totalRows = composition.totalBars * composition.rowsPerPattern;
-  const tailSeconds = 2.4;
-  const totalSeconds = totalRows * rowDuration + tailSeconds;
+  const loopSeconds = totalRows * rowDuration;
+  const tailSeconds = options.tailSeconds || 0;
+  const totalSeconds = loopSeconds + tailSeconds;
   const totalSamples = Math.ceil(totalSeconds * SAMPLE_RATE);
   const left = new Float32Array(totalSamples);
   const right = new Float32Array(totalSamples);
+  const loopSamples = Math.ceil(loopSeconds * SAMPLE_RATE);
 
   composition.tracks.forEach(function (track, trackIndex) {
     const voice = createVoiceProfile(track, trackIndex, composition.tracks.length);
     track.notes.forEach(function (note) {
-      renderNote(left, right, note, voice, rowDuration, composition.rowsPerPattern);
+      renderNote(left, right, note, voice, rowDuration, composition.rowsPerPattern, {
+        loop: options.loop,
+        loopSamples: loopSamples
+      });
     });
   });
 
   normalize(left, right);
-  return createWaveFile(left, right);
+  return {
+    left: left,
+    right: right,
+    sampleRate: SAMPLE_RATE,
+    loopSeconds: loopSeconds
+  };
 }
 
 function createVoiceProfile(track, trackIndex, trackCount) {
@@ -45,7 +70,7 @@ function createVoiceProfile(track, trackIndex, trackCount) {
   };
 }
 
-function renderNote(left, right, note, voice, rowDuration, rowsPerPattern) {
+function renderNote(left, right, note, voice, rowDuration, rowsPerPattern, options) {
   const startSeconds = (note.bar * rowsPerPattern + note.row) * rowDuration;
   const requestedDuration = note.lengthRows * rowDuration;
   const holdSeconds = Math.max(0.08, Math.min(requestedDuration, voice.sustainSeconds));
@@ -56,8 +81,10 @@ function renderNote(left, right, note, voice, rowDuration, rowsPerPattern) {
   const detunedFrequency = frequency * Math.pow(2, voice.detuneCents / 1200);
 
   for (let index = 0; index < noteSamples; index += 1) {
-    const targetSample = startSample + index;
-    if (targetSample >= left.length) {
+    let targetSample = startSample + index;
+    if (options.loop) {
+      targetSample %= options.loopSamples;
+    } else if (targetSample >= left.length) {
       break;
     }
 
