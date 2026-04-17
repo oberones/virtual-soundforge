@@ -6,6 +6,7 @@ import { createRandomGenerator } from "../core/generators/random.js";
 import { renderCompositionToWave } from "../core/render/simple-synth.js";
 import { renderCompositionToMidi } from "../core/render/midi-export.js";
 import { createLivePlaybackEngine } from "../core/render/live-synth.js";
+import { createVisualizer } from "./visualizer.js";
 import { saveLatestSnapshot } from "../core/storage/session.js";
 
 const LIVE_UPDATE_DELAY_MS = 140;
@@ -15,8 +16,17 @@ const state = {
   composition: null,
   isPlaying: false,
   liveUpdateTimer: null,
-  playback: createLivePlaybackEngine()
+  playback: createLivePlaybackEngine({
+    onNoteScheduled: function (event) {
+      visualizer.onNoteScheduled(event);
+    }
+  })
 };
+
+const visualizer = createVisualizer(
+  document.getElementById("visualizer"),
+  state.playback
+);
 
 const elements = {
   mode: document.getElementById("mode"),
@@ -121,6 +131,7 @@ function clearLiveUpdateTimer() {
 
 function applyLiveUpdate(source) {
   generateComposition();
+  visualizer.renderOnce();
 
   if (state.isPlaying) {
     state.playback.updateComposition(state.composition);
@@ -161,6 +172,7 @@ async function toggleLoopPlayback() {
 
   state.isPlaying = true;
   updateTransportUi();
+  visualizer.start();
   setStatus("Transport running. Upcoming notes will update live as you change the controls.");
 }
 
@@ -169,6 +181,8 @@ function stopLoopPlayback() {
   state.playback.stop();
   state.isPlaying = false;
   updateTransportUi();
+  visualizer.stop();
+  visualizer.renderOnce();
   setStatus("Loop stopped.");
 }
 
@@ -229,4 +243,5 @@ elements.exportMidiButton.addEventListener("click", exportMidi);
 
 generateComposition();
 updateTransportUi();
+visualizer.renderOnce();
 setStatus("Ready for live transport playback.");

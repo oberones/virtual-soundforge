@@ -4,9 +4,12 @@ const START_DELAY_SECONDS = 0.05;
 const STOP_FADE_SECONDS = 0.08;
 const SCHEDULE_SAFETY_SECONDS = 0.02;
 
-export function createLivePlaybackEngine() {
+export function createLivePlaybackEngine(options) {
+  const settings = options || {};
   let audioContext = null;
   let sessionGain = null;
+  let analyserNode = null;
+  let analyserTapGain = null;
   let schedulerId = null;
   let isRunning = false;
   let nextRowTime = 0;
@@ -49,12 +52,38 @@ export function createLivePlaybackEngine() {
 
     isRunning() {
       return isRunning;
+    },
+
+    getVisualState() {
+      if (!audioContext || !analyserNode) {
+        return null;
+      }
+
+      const fftSize = analyserNode.frequencyBinCount;
+      const timeDomain = new Uint8Array(fftSize);
+      const frequency = new Uint8Array(fftSize);
+      analyserNode.getByteTimeDomainData(timeDomain);
+      analyserNode.getByteFrequencyData(frequency);
+      return {
+        timeDomain: timeDomain,
+        frequency: frequency,
+        sampleRate: audioContext.sampleRate,
+        currentTime: audioContext.currentTime,
+        isRunning: isRunning
+      };
     }
   };
 
   async function ensureAudioContext() {
     if (!audioContext) {
       audioContext = new window.AudioContext();
+      analyserNode = audioContext.createAnalyser();
+      analyserNode.fftSize = 256;
+      analyserNode.smoothingTimeConstant = 0.82;
+      analyserTapGain = audioContext.createGain();
+      analyserTapGain.gain.value = 0.0001;
+      analyserNode.connect(analyserTapGain);
+      analyserTapGain.connect(audioContext.destination);
     }
 
     if (audioContext.state === "suspended") {
@@ -71,6 +100,7 @@ export function createLivePlaybackEngine() {
     sessionGain.gain.setValueAtTime(0.0001, context.currentTime);
     sessionGain.gain.exponentialRampToValueAtTime(1, context.currentTime + 0.03);
     sessionGain.connect(context.destination);
+    sessionGain.connect(analyserNode);
   }
 
   function fadeOutSession() {
@@ -149,7 +179,9 @@ function prepareComposition(composition) {
       const rowIndex = (note.bar * composition.rowsPerPattern + note.row) % totalRows;
       rows[rowIndex].push({
         note: note,
-        voice: voice
+        voice: voice,
+        trackIndex: trackIndex,
+        trackRole: track.role
       });
     });
   });
@@ -169,6 +201,21 @@ function scheduleRow(prepared, rowIndex, when, audioContext, outputNode) {
 
   events.forEach(function (event) {
     scheduleNote(audioContext, outputNode, event.note, event.voice, prepared.rowDuration, when);
+    if (settings.onNoteScheduled) {
+      try {
+        settings.onNoteScheduled({
+          midi: event.note.midi,
+          durationRows: event.note.lengthRows,
+          trackIndex: event.trackIndex,
+          trackRole: event.trackRole,
+          startTime: when,
+          rowDuration: prepared.rowDuration,
+          voice: event.voice
+        });
+      } catch (error) {
+        console.error("Visualizer note hook failed", error);
+      }
+    }
   });
 }
 
