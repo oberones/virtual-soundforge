@@ -3,15 +3,25 @@ import {
   projectToSummary
 } from "../core/project.js";
 import { createRandomGenerator } from "../core/generators/random.js";
-import { renderCompositionToWave } from "../core/render/simple-synth.js";
+import {
+  renderCompositionToLoop,
+  renderCompositionToWave
+} from "../core/render/simple-synth.js";
 import { renderCompositionToMidi } from "../core/render/midi-export.js";
 import { saveLatestSnapshot } from "../core/storage/session.js";
+
+const LIVE_UPDATE_DELAY_MS = 180;
+const FADE_SECONDS = 0.06;
 
 const state = {
   project: null,
   composition: null,
-  wave: null,
-  objectUrl: null
+  audioContext: null,
+  currentSource: null,
+  currentGain: null,
+  isPlaying: false,
+  liveUpdateTimer: null,
+  renderRevision: 0
 };
 
 const elements = {
@@ -35,12 +45,37 @@ const elements = {
   playButton: document.getElementById("playButton"),
   exportButton: document.getElementById("exportButton"),
   exportMidiButton: document.getElementById("exportMidiButton"),
-  audio: document.getElementById("audio"),
+  transportHint: document.getElementById("transportHint"),
   status: document.getElementById("status")
 };
 
+const liveInputs = [
+  elements.mode,
+  elements.key,
+  elements.scale,
+  elements.tempo,
+  elements.bars,
+  elements.formStyle,
+  elements.style,
+  elements.voices,
+  elements.noteLength,
+  elements.seed,
+  elements.density,
+  elements.complexity,
+  elements.variation,
+  elements.drama,
+  elements.evolution
+];
+
 function setStatus(message) {
   elements.status.textContent = message;
+}
+
+function updateTransportUi() {
+  elements.playButton.textContent = state.isPlaying ? "Stop Loop" : "Start Loop";
+  elements.transportHint.textContent = state.isPlaying
+    ? "Looping live. Adjust the controls to hear changes in place."
+    : "Press Start Loop to begin continuous playback. Changing controls will update the next loop live.";
 }
 
 function readForm() {
@@ -76,62 +111,167 @@ function updateUi() {
   });
 }
 
-function renderAudioWave() {
-  if (!state.wave) {
-    return;
-  }
-
-  if (state.objectUrl) {
-    URL.revokeObjectURL(state.objectUrl);
-  }
-
-  const blob = new Blob([state.wave], { type: "audio/wav" });
-  state.objectUrl = URL.createObjectURL(blob);
-  elements.audio.src = state.objectUrl;
-}
-
 function generateComposition() {
   const form = readForm();
   state.project = createProjectFromForm(form);
-
-  const generator = createRandomGenerator();
-  state.composition = generator.generate(state.project);
-  state.wave = null;
-
+  state.composition = createRandomGenerator().generate(state.project);
   updateUi();
-  setStatus("Composition generated. Ready to render.");
 }
 
-function renderComposition(done) {
+async function ensureAudioContext() {
+  if (!state.audioContext) {
+    state.audioContext = new window.AudioContext();
+  }
+
+  if (state.audioContext.state === "suspended") {
+    await state.audioContext.resume();
+  }
+
+  return state.audioContext;
+}
+
+function createAudioBufferFromLoop(context, composition) {
+  const stereo = renderCompositionToLoop(composition);
+  const frameCount = stereo.left.length;
+  const buffer = context.createBuffer(2, frameCount, stereo.sampleRate);
+  buffer.copyToChannel(stereo.left, 0);
+  buffer.copyToChannel(stereo.right, 1);
+  return buffer;
+}
+
+function fadeOutCurrentSource(context) {
+  if (!state.currentSource || !state.currentGain) {
+    return;
+  }
+
+  const stopAt = context.currentTime + FADE_SECONDS;
+  state.currentGain.gain.cancelScheduledValues(context.currentTime);
+  state.currentGain.gain.setValueAtTime(state.currentGain.gain.value, context.currentTime);
+  state.currentGain.gain.linearRampToValueAtTime(0.0001, stopAt);
+  state.currentSource.stop(stopAt + 0.01);
+  state.currentSource = null;
+  state.currentGain = null;
+}
+
+function swapLoopSource(buffer) {
+  const context = state.audioContext;
+  const now = context.currentTime;
+  const source = context.createBufferSource();
+  const gain = context.createGain();
+
+  source.buffer = buffer;
+  source.loop = true;
+  source.loopStart = 0;
+  source.loopEnd = buffer.duration;
+  gain.gain.setValueAtTime(0.0001, now);
+
+  source.connect(gain);
+  gain.connect(context.destination);
+  source.start(now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(1, now + FADE_SECONDS);
+
+  if (state.currentSource && state.currentGain) {
+    const oldSource = state.currentSource;
+    const oldGain = state.currentGain;
+    oldGain.gain.cancelScheduledValues(now);
+    oldGain.gain.setValueAtTime(Math.max(0.0001, oldGain.gain.value), now);
+    oldGain.gain.exponentialRampToValueAtTime(0.0001, now + FADE_SECONDS);
+    oldSource.stop(now + FADE_SECONDS + 0.01);
+  }
+
+  state.currentSource = source;
+  state.currentGain = gain;
+}
+
+async function refreshLiveLoop(statusMessage) {
+  if (!state.composition || !state.isPlaying) {
+    return;
+  }
+
+  const revision = state.renderRevision + 1;
+  state.renderRevision = revision;
+  const context = await ensureAudioContext();
+  setStatus(statusMessage || "Updating live loop...");
+
+  window.setTimeout(function () {
+    if (revision !== state.renderRevision || !state.isPlaying) {
+      return;
+    }
+
+    const buffer = createAudioBufferFromLoop(context, state.composition);
+    swapLoopSource(buffer);
+    setStatus("Live loop updated.");
+  }, 0);
+}
+
+function scheduleLiveUpdate() {
+  window.clearTimeout(state.liveUpdateTimer);
+  state.liveUpdateTimer = window.setTimeout(function () {
+    generateComposition();
+    if (state.isPlaying) {
+      refreshLiveLoop("Regenerating loop...");
+    } else {
+      setStatus("Parameters updated. Press Start Loop to hear the new pattern.");
+    }
+  }, LIVE_UPDATE_DELAY_MS);
+}
+
+async function toggleLoopPlayback() {
+  if (state.isPlaying) {
+    stopLoopPlayback();
+    return;
+  }
+
   if (!state.composition) {
     generateComposition();
   }
 
-  setStatus("Rendering audio...");
-  window.setTimeout(function () {
-    state.wave = renderCompositionToWave(state.composition);
-    renderAudioWave();
-    setStatus("Render complete.");
-    if (done) {
-      done();
-    }
-  }, 0);
+  await ensureAudioContext();
+  state.isPlaying = true;
+  updateTransportUi();
+  refreshLiveLoop("Starting live loop...");
 }
 
-function playSong() {
-  renderComposition(function () {
-    elements.audio.currentTime = 0;
-    elements.audio.play();
-  });
+function stopLoopPlayback() {
+  if (!state.audioContext) {
+    state.isPlaying = false;
+    updateTransportUi();
+    setStatus("Loop stopped.");
+    return;
+  }
+
+  state.isPlaying = false;
+  state.renderRevision += 1;
+  fadeOutCurrentSource(state.audioContext);
+  updateTransportUi();
+  setStatus("Loop stopped.");
+}
+
+function generateNow() {
+  window.clearTimeout(state.liveUpdateTimer);
+  generateComposition();
+  if (state.isPlaying) {
+    refreshLiveLoop("Regenerating loop...");
+  } else {
+    setStatus("Composition regenerated.");
+  }
 }
 
 function exportWave() {
-  renderComposition(function () {
-    const link = document.createElement("a");
-    link.href = state.objectUrl;
-    link.download = "generative-harmony.wav";
-    link.click();
-  });
+  if (!state.composition) {
+    generateComposition();
+  }
+
+  const wave = renderCompositionToWave(state.composition);
+  const blob = new Blob([wave], { type: "audio/wav" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "generative-harmony.wav";
+  link.click();
+  window.setTimeout(function () {
+    URL.revokeObjectURL(url);
+  }, 0);
 }
 
 function exportMidi() {
@@ -154,13 +294,20 @@ function exportMidi() {
 function randomSeed() {
   const value = Math.random().toString(36).slice(2, 10);
   elements.seed.value = value;
-  generateComposition();
+  generateNow();
 }
 
-elements.generateButton.addEventListener("click", generateComposition);
+liveInputs.forEach(function (input) {
+  input.addEventListener("input", scheduleLiveUpdate);
+  input.addEventListener("change", scheduleLiveUpdate);
+});
+
+elements.generateButton.addEventListener("click", generateNow);
 elements.shuffleSeedButton.addEventListener("click", randomSeed);
-elements.playButton.addEventListener("click", playSong);
+elements.playButton.addEventListener("click", toggleLoopPlayback);
 elements.exportButton.addEventListener("click", exportWave);
 elements.exportMidiButton.addEventListener("click", exportMidi);
 
 generateComposition();
+updateTransportUi();
+setStatus("Ready for live looping.");
