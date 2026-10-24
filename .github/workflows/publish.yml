@@ -1,0 +1,141 @@
+name: Verify and publish container
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    # This is only a trigger filter; release-metadata.mjs validates full SemVer.
+    tags: ['[0-9]*.[0-9]*.[0-9]*']
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
+      version: ${{ steps.release.outputs.version }}
+      tags: ${{ steps.release.outputs.tags }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Check every active JavaScript module
+        run: make check
+
+      - name: Test release eligibility and image tags
+        run: node --test scripts/release-metadata.test.mjs
+
+      - name: Determine release metadata
+        id: release
+        run: node scripts/release-metadata.mjs
+
+      - name: Validate production Compose configuration
+        run: docker compose --file deploy/compose.production.yml config --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build verification image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: virtual-soundforge:verify
+          build-args: |
+            VERSION=${{ steps.release.outputs.version || 'dev' }}
+            REVISION=${{ github.sha }}
+          cache-from: type=gha,scope=virtual-soundforge-amd64
+          cache-to: type=gha,mode=max,scope=virtual-soundforge-amd64
+
+      - name: Check production Compose health and HTTP responses
+        env:
+          VIRTUAL_SOUNDFORGE_IMAGE: virtual-soundforge:verify
+          VIRTUAL_SOUNDFORGE_PORT: '8080'
+          VIRTUAL_SOUNDFORGE_NETWORK: virtual-soundforge-ci
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose=(docker compose --file deploy/compose.production.yml --project-name virtual-soundforge-ci)
+          docker network create "$VIRTUAL_SOUNDFORGE_NETWORK"
+          cleanup() {
+            "${compose[@]}" logs
+            "${compose[@]}" down
+            docker network rm "$VIRTUAL_SOUNDFORGE_NETWORK"
+          }
+          trap cleanup EXIT
+          "${compose[@]}" up --detach --no-build --pull never --wait --wait-timeout 120
+          node scripts/container-smoke.mjs http://127.0.0.1:8080/
+
+  publish:
+    needs: verify
+    if: >-
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/') &&
+      github.repository == 'oberones/virtual-soundforge' &&
+      needs.verify.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out verified source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The same source, build args, and digest-pinned base passed HTTP checks.
+      - name: Build and publish release image
+        id: publish
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ needs.verify.outputs.tags }}
+          build-args: |
+            VERSION=${{ needs.verify.outputs.version }}
+            REVISION=${{ github.sha }}
+          cache-from: type=gha,scope=virtual-soundforge-amd64
+          cache-to: type=gha,mode=max,scope=virtual-soundforge-amd64
+
+      - name: Report published tags and digest
+        env:
+          PUBLISHED_TAGS: ${{ needs.verify.outputs.tags }}
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+        shell: bash
+        run: |
+          {
+            printf '## Published container\n\nPlatform: `linux/amd64`\n\n'
+            while IFS= read -r tag; do
+              printf -- '- `%s`\n' "$tag"
+            done <<< "$PUBLISHED_TAGS"
+            printf '\nDigest: `%s`\n' "$IMAGE_DIGEST"
+            printf '\nPull the exact image:\n\n```sh\n'
+            printf 'docker pull --platform linux/amd64 ghcr.io/oberones/virtual-soundforge@%s\n' "$IMAGE_DIGEST"
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"

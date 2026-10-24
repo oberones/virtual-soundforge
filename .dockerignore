@@ -1,0 +1,16 @@
+# Only the active app and container configuration enter the build context.
+**
+!Dockerfile
+!docker/
+!docker/nginx.conf
+!index.html
+!details.html
+!index.css
+!favicon.ico
+!gpl.txt
+!src/
+!src/**/
+!src/**/*.js
+# Exclude hidden metadata even when it is nested inside src/.
+**/.*
+**/_notes

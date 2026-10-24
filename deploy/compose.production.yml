@@ -1,0 +1,46 @@
+name: virtual-soundforge
+
+services:
+  virtual-soundforge:
+    image: ${VIRTUAL_SOUNDFORGE_IMAGE:-ghcr.io/oberones/virtual-soundforge:${IMAGE_TAG:-latest}}
+    platform: linux/amd64
+    container_name: virtual-soundforge
+    restart: always
+    user: "101:101"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Keep the image's port 80 available to the unprivileged nginx process.
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
+    # Skip upstream entrypoint scripts that attempt to rewrite configuration.
+    entrypoint: ["nginx"]
+    command: ["-g", "daemon off;"]
+    # The published image uses nginx's standard PID and cache paths.
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
+      - /run:rw,noexec,nosuid,nodev,size=1m,uid=101,gid=101,mode=0700
+      - /var/cache/nginx:rw,noexec,nosuid,nodev,size=16m,uid=101,gid=101,mode=0700
+    pids_limit: 64
+    ports:
+      - "127.0.0.1:${VIRTUAL_SOUNDFORGE_PORT:-8082}:80"
+    networks:
+      - web-backend
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/index.html"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  web-backend:
+    name: ${VIRTUAL_SOUNDFORGE_NETWORK:-web-backend}
+    external: true

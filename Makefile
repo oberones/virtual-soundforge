@@ -16,10 +16,7 @@ serve:
 	python3 -m http.server $(PORT) --bind $(HOST)
 
 check:
-	node --check src/app/main.js
-	node --check src/app/details.js
-	node --check src/core/project.js
-	node --check src/core/generators/random.js
-	node --check src/core/render/simple-synth.js
-	node --check src/core/render/live-synth.js
-	node --check src/core/render/midi-export.js
+	@set -eu; find src -type f -name '*.js' | sort | while IFS= read -r file; do \
+		printf 'Checking %s\n' "$$file"; \
+		node --input-type=module --check < "$$file"; \
+	done
