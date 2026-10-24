@@ -1,4 +1,4 @@
-const MAX_NOTE_LIFE_MS = 5000;
+const NOTE_DECAY_SECONDS = 0.9;
 
 export function createVisualizer(canvas, playback) {
   const context = canvas.getContext("2d");
@@ -38,21 +38,23 @@ export function createVisualizer(canvas, playback) {
   }
 
   function onNoteScheduled(event) {
-    const now = performance.now();
+    const durationSeconds = event.durationRows * event.rowDuration;
     state.notes.push({
       midi: event.midi,
       trackIndex: event.trackIndex,
       trackRole: event.trackRole,
-      startedAtMs: now,
-      endsAtMs: now + event.durationRows * event.rowDuration * 1000,
-      scheduledAt: event.startTime,
-      durationMs: event.durationRows * event.rowDuration * 1000,
+      startTime: event.startTime,
+      endTime: event.startTime + durationSeconds,
+      decayUntil: event.startTime + durationSeconds + NOTE_DECAY_SECONDS,
+      durationSeconds: durationSeconds,
       brightness: 0.45 + event.voice.brightness * 0.9,
-      pan: event.voice.pan
+      pan: event.voice.pan,
+      spread: hashToUnit(event.midi * 31 + event.trackIndex * 17 + Math.round(event.startTime * 1000)),
+      shimmer: hashToUnit(event.midi * 13 + event.trackIndex * 29 + Math.round(durationSeconds * 1000))
     });
 
-    if (state.notes.length > 90) {
-      state.notes.splice(0, state.notes.length - 90);
+    if (state.notes.length > 120) {
+      state.notes.splice(0, state.notes.length - 120);
     }
   }
 
@@ -89,16 +91,16 @@ export function createVisualizer(canvas, playback) {
 
     const width = state.width;
     const height = state.height;
-    const nowMs = performance.now();
     const visualState = playback.getVisualState ? playback.getVisualState() : null;
     const energy = visualState ? computeEnergy(visualState.frequency) : 0.08;
     const shimmer = visualState ? computeShimmer(visualState.timeDomain) : 0.06;
     const hueOffset = playback.isRunning && playback.isRunning() ? 0 : -10;
+    const nowTime = visualState ? visualState.currentTime : performance.now() / 1000;
 
     context.clearRect(0, 0, width, height);
     paintBackdrop(width, height, energy, shimmer, hueOffset);
     paintGrid(width, height, energy);
-    paintNotes(width, height, nowMs, energy);
+    paintNotes(width, height, nowTime, energy);
     paintWaveform(width, height, visualState ? visualState.timeDomain : null, energy);
   }
 
@@ -141,48 +143,45 @@ export function createVisualizer(canvas, playback) {
     }
   }
 
-  function paintNotes(width, height, nowMs, energy) {
+  function paintNotes(width, height, nowTime, energy) {
     const minMidi = 36;
     const maxMidi = 96;
     state.notes = state.notes.filter(function (note) {
-      return nowMs - note.endsAtMs < MAX_NOTE_LIFE_MS;
+      return nowTime <= note.decayUntil;
     });
 
     state.notes.forEach(function (note) {
-      const totalLife = Math.max(220, note.durationMs + 1400);
-      const age = nowMs - note.startedAtMs;
-      const fade = clamp(1 - age / totalLife, 0, 1);
-      if (fade <= 0) {
+      const phase = getNotePhase(note, nowTime);
+      if (phase.alpha <= 0) {
         return;
       }
 
-      const progress = clamp(age / Math.max(400, totalLife), 0, 1);
-      const x = width * (0.14 + progress * 0.78);
       const pitchAmount = clamp((note.midi - minMidi) / (maxMidi - minMidi), 0, 1);
-      const y = height - pitchAmount * height * 0.82 - height * 0.09;
-      const radius = 8 + note.brightness * 7 + energy * 10;
+      const x = getNoteX(note, width);
+      const y = height - pitchAmount * height * 0.78 - height * 0.12 + (note.shimmer - 0.5) * 18;
+      const pointRadius = 2.2 + note.brightness * 1.8 + energy * 1.6;
+      const bloomRadius = pointRadius + 6 + note.brightness * 4 + phase.bloom * 24;
       const hue = getRoleHue(note.trackRole);
-      const alpha = fade * (0.2 + note.brightness * 0.45);
+      const alpha = phase.alpha * (0.3 + note.brightness * 0.45);
 
-      context.beginPath();
-      context.strokeStyle = "hsla(" + hue + ", 85%, 72%, " + alpha * 0.55 + ")";
-      context.lineWidth = Math.max(1.5, radius * 0.42);
-      context.moveTo(Math.max(0, x - radius * 5.5), y);
-      context.lineTo(x, y);
-      context.stroke();
-
-      const glow = context.createRadialGradient(x, y, 0, x, y, radius * 2.5);
-      glow.addColorStop(0, "hsla(" + hue + ", 95%, 76%, " + alpha + ")");
-      glow.addColorStop(0.45, "hsla(" + hue + ", 95%, 65%, " + alpha * 0.65 + ")");
+      const glow = context.createRadialGradient(x, y, pointRadius * 0.35, x, y, bloomRadius);
+      glow.addColorStop(0, "hsla(" + hue + ", 95%, 76%, " + alpha * 0.18 + ")");
+      glow.addColorStop(0.3, "hsla(" + hue + ", 95%, 70%, " + alpha * 0.22 + ")");
       glow.addColorStop(1, "hsla(" + hue + ", 95%, 60%, 0)");
       context.fillStyle = glow;
       context.beginPath();
-      context.arc(x, y, radius * 2.5, 0, Math.PI * 2);
+      context.arc(x, y, bloomRadius, 0, Math.PI * 2);
       context.fill();
+
+      context.strokeStyle = "hsla(" + hue + ", 98%, 82%, " + alpha * 0.55 + ")";
+      context.lineWidth = 1 + phase.bloom * 1.8;
+      context.beginPath();
+      context.arc(x, y, pointRadius + phase.bloom * 12, 0, Math.PI * 2);
+      context.stroke();
 
       context.fillStyle = "hsla(" + hue + ", 96%, 84%, " + alpha * 0.95 + ")";
       context.beginPath();
-      context.arc(x, y, radius, 0, Math.PI * 2);
+      context.arc(x, y, pointRadius, 0, Math.PI * 2);
       context.fill();
     });
   }
@@ -255,6 +254,40 @@ function getRoleHue(role) {
   if (role === "halo") return 320;
   if (role === "glass") return 205;
   return 252;
+}
+
+function getNotePhase(note, nowTime) {
+  const attackWindow = Math.min(0.22, Math.max(0.08, note.durationSeconds * 0.35));
+
+  if (nowTime < note.startTime) {
+    return { alpha: 0, bloom: 0 };
+  }
+
+  if (nowTime <= note.endTime) {
+    const activeProgress = clamp((nowTime - note.startTime) / Math.max(attackWindow, 0.001), 0, 1);
+    const sustainProgress = clamp((nowTime - note.startTime) / Math.max(note.durationSeconds, 0.001), 0, 1);
+    return {
+      alpha: 0.9 - sustainProgress * 0.2,
+      bloom: activeProgress * 0.85
+    };
+  }
+
+  const releaseProgress = clamp((nowTime - note.endTime) / NOTE_DECAY_SECONDS, 0, 1);
+  return {
+    alpha: 0.7 * (1 - releaseProgress),
+    bloom: 0.85 + releaseProgress * 0.75
+  };
+}
+
+function getNoteX(note, width) {
+  const panAmount = (note.pan + 1) * 0.5;
+  const jitter = (note.spread - 0.5) * 0.18;
+  return width * clamp(0.18 + panAmount * 0.64 + jitter, 0.08, 0.92);
+}
+
+function hashToUnit(seed) {
+  const value = Math.sin(seed * 12.9898) * 43758.5453;
+  return value - Math.floor(value);
 }
 
 function clamp(value, min, max) {
